@@ -41,8 +41,8 @@ int main (int nba, char *arg[])
 
 	serveur=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
 	sockAddr.sin_family=PF_INET;
-	sockAddr.sin_port=htons(2000);
-	sockAddr.sin_addr.s_addr=inet_addr(arg[1]);
+	sockAddr.sin_port=htons(2001);
+	sockAddr.sin_addr.s_addr=0;
 	addr=sizeof(sockAddr);
 
 	message.label=0.0;
