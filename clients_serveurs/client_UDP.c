@@ -33,12 +33,6 @@ int main (int nba, char *arg[])
 	struct sockaddr_in sockAddr, sock;
 	int serveur, client, err, nConnect, longaddr , results, resultr;
 
-	// Check if server address argument is provided
-    if (nba < 2) {
-        fprintf(stderr, "Usage: %s <server_ip>\n", arg[0]);
-        exit(1);
-    }
-
 	serveur=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
 	sockAddr.sin_family=PF_INET;
 	sockAddr.sin_port=htons(2001);

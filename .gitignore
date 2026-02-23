@@ -24,3 +24,7 @@ out/
 .settings/
 .idea
 CMakeLists.txt
+
+# --- CoppeliaSim scene files ---
+*.ttt
+
