@@ -23,6 +23,7 @@ struct mesg {
 
 int main (int nba, char *arg[])
 {
+	// Client
 	int result;
 	int nsend;
 	int nconnect;
@@ -36,7 +37,7 @@ int main (int nba, char *arg[])
 	serveur=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
 	sockAddr.sin_family=PF_INET;
 	sockAddr.sin_port=htons(2001);
-	sockAddr.sin_addr.s_addr=0;
+	sockAddr.sin_addr.s_addr=inet_addr("127.0.0.2");
 	addr=sizeof(sockAddr);
 
 	message.label=0.0;
@@ -52,9 +53,10 @@ int main (int nba, char *arg[])
 		message.label++;
 		gettimeofday(&message.time, NULL);
 		results=sendto(serveur,&message,sizeof(message),0,(struct sockaddr*)&sockAddr,sizeof(sockAddr));
+
 		resultr=recvfrom(serveur,&message,sizeof(message), 0,(struct sockaddr*)&sockAddr,&addr);
 
-		printf("\n client : \n  label=%lf rr=%d rs=%d\n time=%ld.%ld\n ",message.label,resultr, results, message.time.tv_sec,message.time.tv_usec);
+		printf("--- client --- \n  label=%lf rr=%d rs=%d\n time=%ld.%ld\n ",message.label,resultr, results, message.time.tv_sec,message.time.tv_usec);
 
 	}while(message.label<100.0);
 

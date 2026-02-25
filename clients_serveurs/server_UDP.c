@@ -23,6 +23,7 @@ struct mesg {
 
 int main (int nba, char *arg[])
 {
+	// Serveur (127.0.0.1)
 	struct mesg message;
 	int result, nsend;
 	struct sockaddr_in sockAddr, sock;
@@ -36,7 +37,7 @@ int main (int nba, char *arg[])
 	serveur=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
 	sockAddr.sin_family=PF_INET;
 	sockAddr.sin_port=htons(2000);
-	sockAddr.sin_addr.s_addr=0;
+	sockAddr.sin_addr.s_addr=inet_addr("127.0.0.1");
 	longaddr=sizeof(sockAddr);
 
 	err=bind(serveur,(struct sockaddr*)&sockAddr,longaddr);
@@ -63,13 +64,13 @@ int main (int nba, char *arg[])
 
 		resultr=recvfrom(serveur,&message,sizeof(message), 0,(struct sockaddr*)&sockAddr,&longaddr);
 
-		printf("server : \n label=%lf rt=%d rr=%d\n time=%ld.%ld\n",message.label,results,resultr,message.time.tv_sec,message.time.tv_usec);
+		printf("--- server --- \n label=%lf rt=%d rr=%d\n time=%ld.%ld\n",message.label,results,resultr,message.time.tv_sec,message.time.tv_usec);
 
 		results=sendto(serveur,&message,sizeof(message),0,(struct sockaddr*)&sockAddr,sizeof(sockAddr));
 
 	}while(message.label<100.0);
 
-
+	usleep(Te);
 	close(serveur);
 
 	return 0;

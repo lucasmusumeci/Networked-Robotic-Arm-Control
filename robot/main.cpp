@@ -11,6 +11,7 @@
 #include <math.h>
 #include <string.h>
 #include <unistd.h>
+#include "robManip.hpp"
 
 using namespace std;
 
@@ -85,6 +86,15 @@ int SetJointPos(int clientID,  float *q)
 
 int main(int argc,char* argv[])
 {
+
+    Robot robot = CreateRobotisH(Eigen::VectorXd::Zero(6));
+
+    Eigen::Matrix4d T = robot.MGD().first;
+    cout << "Transformation matrix T:\n" << T << endl;
+
+    Eigen::Vector3d P(0.5, 0.0, 0.5);
+    cout << "Jacobian at P:\n" << robot.Jacobienne(P) << endl;
+
     int portNb=5555;            // the port number where to connect
     int timeOutInMs=5000;       // connection time-out in milliseconds (for the first connection)
     int commThreadCycleInMs=5;  // indicate how often data packets are sent back and forth - a default value of 5 is recommended
@@ -117,6 +127,10 @@ int main(int argc,char* argv[])
        
        int offsetTime=simxGetLastCmdTime(clientID)/1000;
 
+
+
+
+       /*
        while (t < tfinal) {
            printf("Current time: %6.4f\n", t);
            //GetJointPos(clientId,qr);
@@ -132,6 +146,7 @@ int main(int argc,char* argv[])
            t+=dt;
            usleep(dt*1000*1000);
         }
+        */
 
         simxStopSimulation(clientID, simx_opmode_oneshot);
 
