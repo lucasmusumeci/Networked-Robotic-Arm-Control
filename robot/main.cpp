@@ -92,7 +92,7 @@ int main(int argc,char* argv[])
     Eigen::Matrix4d T = robot.MGD().first;
     cout << "Transformation matrix T:\n" << T << endl;
 
-    Eigen::Vector3d P(0.5, 0.0, 0.5);
+    Eigen::Vector3d P = T.block<3,1>(0, 3);
     cout << "Jacobian at P:\n" << robot.Jacobienne(P) << endl;
 
     int portNb=5555;            // the port number where to connect
@@ -113,25 +113,27 @@ int main(int argc,char* argv[])
 
     if (clientID!=-1)
     {
-       int nbloop=100;
-       simxSynchronous(clientID,true);       // Enable the synchronous mode (Blocking function call)
-       simxStartSimulation(clientID, simx_opmode_oneshot);
+        int nbloop=100;
+        simxSynchronous(clientID,true);       // Enable the synchronous mode (Blocking function call)
+        simxStartSimulation(clientID, simx_opmode_oneshot);
 
-       float t=0.0;
-       float tfinal=5;
-       float dt=0.01;
-       float q0m=0.5;
-       float q1m=0.5;
-       float q2m=0.6;
-       float w=2*M_PI/2.5;
+        float t=0.0;
+        float tfinal=5;
+        float dt=0.01;
+        float q0m=0.5;
+        float q1m=0.5;
+        float q2m=0.6;
+        float w=2*M_PI/2.5;
        
-       int offsetTime=simxGetLastCmdTime(clientID)/1000;
+        int offsetTime=simxGetLastCmdTime(clientID)/1000;
+
+        Eigen::VectorXd qf(6); qf << 0.0, 40.5, 35.0, 0.0, 59.5, 0.0;
+        qf = qf * M_PI / 180.0;  // Convert to radians
+        robot.simuTrapezePosition(clientID, handles, qf, 1.0, 0.01);
 
 
-
-
-       /*
-       while (t < tfinal) {
+        /*
+        while (t < tfinal) {
            printf("Current time: %6.4f\n", t);
            //GetJointPos(clientId,qr);
            q[0]=q0m*sin(w*t);
