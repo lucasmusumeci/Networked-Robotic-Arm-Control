@@ -36,9 +36,9 @@ private:
     Eigen::VectorXd q_max;
 
     int getN() const { return static_cast<int>(alpha.size()); }
-    Eigen::Matrix3d hat(const Eigen::Vector3d& v);
+    Eigen::Matrix3d hat(const Eigen::Vector3d& v) const;
     Eigen::Matrix3d calcul_L(const Eigen::Matrix3d& Ad,
-                                    const Eigen::Matrix3d& Ae);
+                                    const Eigen::Matrix3d& Ae) const;
 
 public:
     // Constructors
@@ -80,8 +80,8 @@ public:
     void setQMax(const Eigen::VectorXd& v)         { q_max = v; }
 
     // Methods
-    std::pair<Eigen::Matrix4d, std::vector<Eigen::Matrix4d>> MGD();
-    Eigen::MatrixXd Jacobienne(const Eigen::Vector3d& P);
+    std::pair<Eigen::Matrix4d, std::vector<Eigen::Matrix4d>> MGD() const;
+    Eigen::MatrixXd Jacobienne(const Eigen::Vector3d& P) const;
     Trapeze calculTrapeze(const Eigen::VectorXd& qi,
                           const Eigen::VectorXd& qf,
                           double duree) const;
@@ -92,9 +92,19 @@ public:
                              const Eigen::VectorXd& qf,
                              double tf) const;
 
-    // Simulations
+    // Simulation methods
     void simuTrapezePosition(int clientID, int *handles,const Eigen::VectorXd& qf,
-                             double duree, double dt) const;
+                             double duree, double dt);
+
+    // Commande cinématique
+    void cmdCinematique(int clientID, int *handles,
+                        const Eigen::Vector3d&  Pd,
+                        const Eigen::Matrix3d&  Ad,
+                        const Eigen::Vector3d&  dPd,
+                        const Eigen::Vector3d&  omega_d,
+                        double Kp, double K0, double dt,
+                        double lambda_L);
+
 
     
 

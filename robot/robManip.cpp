@@ -7,7 +7,7 @@ using namespace Eigen;
  * Hat operator for 3D vectors
  */
 
-Matrix3d Robot::hat(const Vector3d& v) {
+Matrix3d Robot::hat(const Vector3d& v) const {
     Matrix3d S;
     S <<  0.0,  -v(2),  v(1),
           v(2),  0.0,  -v(0),
@@ -18,7 +18,7 @@ Matrix3d Robot::hat(const Vector3d& v) {
 /*
  * Compute L matrix used in MCI
  */
-Matrix3d Robot::calcul_L(const Matrix3d& Ad, const Matrix3d& Ae) {
+Matrix3d Robot::calcul_L(const Matrix3d& Ad, const Matrix3d& Ae) const {
     return -0.5 * (hat(Ae.col(0)) * hat(Ad.col(0))
                  + hat(Ae.col(1)) * hat(Ad.col(1))
                  + hat(Ae.col(2)) * hat(Ad.col(2)));
@@ -30,7 +30,7 @@ Matrix3d Robot::calcul_L(const Matrix3d& Ad, const Matrix3d& Ae) {
  * If there is no tool, T_tool should be set to the identity matrix.
  */
 
-std::pair<Matrix4d, std::vector<Matrix4d>> Robot::MGD() {
+std::pair<Matrix4d, std::vector<Matrix4d>> Robot::MGD() const {
     int N = static_cast<int>(alpha.size());
     Matrix4d T = Matrix4d::Identity();
     std::vector<Matrix4d> MT;
@@ -61,7 +61,7 @@ std::pair<Matrix4d, std::vector<Matrix4d>> Robot::MGD() {
     return {T, MT};
 }
 
-MatrixXd Robot::Jacobienne(const Vector3d& P) {
+MatrixXd Robot::Jacobienne(const Vector3d& P) const {
     int N = static_cast<int>(alpha.size());
     MatrixXd J = MatrixXd::Zero(6, N);
     Matrix4d T = Matrix4d::Identity();
@@ -187,11 +187,11 @@ MatrixXd Robot::calculQ(const VectorXd& qi,
 }
 
 /*
- * Simulations
+ * Simulation methods
  */
 
 void Robot::simuTrapezePosition(int clientID, int *handles, const VectorXd& qf,
-                                double duree, double dt) const
+                                double duree, double dt)
 {
     // Build time vector
     Trapeze trap = calculTrapeze(theta, qf, duree);
@@ -211,9 +211,88 @@ void Robot::simuTrapezePosition(int clientID, int *handles, const VectorXd& qf,
             simxSetJointTargetPosition(clientID, handles[i], q(k,i), simx_opmode_oneshot);
         }
         simxSynchronousTrigger(clientID);
+        theta = q.row(k);
     }
 }
 
+/*
+ * Commande cinématique
+ */
+
+ void Robot::cmdCinematique(int clientID, int *handles,
+                            const Vector3d&  Pd,
+                            const Matrix3d&  Ad,
+                            const Vector3d&  dPd,
+                            const Vector3d&  omega_d,
+                            double Kp, double K0, double dt,
+                            double lambda_L)
+{
+    VectorXd qc = theta;
+
+    auto [Te, MTe] = MGD();
+    Matrix3d Ae = Te.block<3,3>(0,0);
+    Vector3d Pe = Te.block<3,1>(0,3);
+
+    Vector3d eps0 = Vector3d::Ones();  // to enter loop
+    int iter = 0;
+
+    while ((Pe - Pd).norm() > 1e-2 || eps0.norm() > 1e-2) {
+        if (++iter > 2000) break;
+
+        // Orientation error
+        eps0 = 0.5 * (Ae.col(0).cross(Ad.col(0))
+                    + Ae.col(1).cross(Ad.col(1))
+                    + Ae.col(2).cross(Ad.col(2)));
+
+        // Angular velocity command
+        Vector3d omega_e;
+        if (eps0.norm() < 1e-2) {
+            omega_e = omega_d;
+        } else {
+            Matrix3d L = calcul_L(Ad, Ae);
+            // Damped pseudo-inverse of L to avoid numerical blow-up
+            Matrix3d L_pinv = L.transpose() *
+                              (L * L.transpose() + lambda_L*lambda_L * Matrix3d::Identity()).inverse();
+            omega_e = L_pinv * (K0 * eps0 + L.transpose() * omega_d);
+        }
+
+        // Linear velocity command
+        Vector3d dPe = dPd + Kp * (Pd - Pe);
+
+        // Joint velocity via damped Jacobian
+        MatrixXd J  = Jacobienne(Pe);
+        Matrix<double,6,1> xdot;
+        xdot << dPe, omega_e;
+
+        // Damped least-squares (Levenberg-Marquardt pseudo-inverse)
+        const double lambda_J = 1e-4;
+        int N = getN();
+        MatrixXd JJt = J * J.transpose();
+        JJt += lambda_J * MatrixXd::Identity(6,6);
+        VectorXd dq = J.transpose() * JJt.ldlt().solve(xdot);
+
+        // ── Clamp and integrate ──────────────────────────────────────────────
+        for (int i = 0; i < N; ++i)
+            dq(i) = std::clamp(dq(i), -V_max(i), V_max(i));
+
+        qc += dq * dt;
+
+        for (int i = 0; i < N; ++i)
+            qc(i) = std::clamp(qc(i), q_min(i), q_max(i));
+
+        // Send command to CoppeliaSim
+        for (int i=0; i < 6; i++) {
+            simxSetJointTargetPosition(clientID, handles[i], qc(i), simx_opmode_oneshot);
+        }
+        simxSynchronousTrigger(clientID);
+
+        // ── Update state ─────────────────────────────────────────────────────
+        theta = qc;
+        auto [Te_new, MT_new] = MGD();
+        Ae = Te_new.block<3,3>(0,0);
+        Pe = Te_new.block<3,1>(0,3);
+    }
+}
 
 
 /*

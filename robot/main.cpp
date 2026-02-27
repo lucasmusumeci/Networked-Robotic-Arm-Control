@@ -22,7 +22,6 @@ extern "C" {
 int handles[6],all_ok=1;
 simxInt handle, error;
 
-
 void GetHandles(int clientID){
 	simxChar objectName[100];
 	char str[10];
@@ -39,50 +38,6 @@ void GetHandles(int clientID){
         }
     }
 }
-/////////////////////////////////////////////////////////
-// Set the join position
-//
-// Inputs:
-//  clientID
-//  q : array of the joint values
-// Return: 0 if an error occurs in object handling, 1 otherwise
-/////////////////////////////////////////////////////////
-int SetJointPos(int clientID,  float *q)
-{
-    //simxChar objectName[100];
-    //char str[10];
-    //simxInt handle, error;
-    //int all_ok=1;
-
-    // Get the table of handles
-    /*
-    for (int i=0; i < 6; i++) {
-        strcpy(objectName, "joint");
-        sprintf(str, "%d", i+1);
-        strcat(objectName,str);
-        error=simxGetObjectHandle(clientID, objectName, &handle, simx_opmode_oneshot_wait);
-        if (error == simx_return_ok)
-            handles[i]=handle;
-        else {
-            printf("Error in Object Handle - joint number %d\n", i);
-            all_ok=0;
-        }
-    }
-    */
-    if (all_ok) {
-        //Pause the communication thread
-        //simxPauseCommunication(clientID, 1);
-        // Send the joint target positions
-        for (int i=0; i < 6; i++)
-            simxSetJointTargetPosition(clientID, handles[i], q[i], simx_opmode_oneshot);
-        // Resume the communication thread to update all values at the same time
-        //simxPauseCommunication(clientID, 0);
-        return 1;
-    }
-    else
-        return 0;
-}
-
 
 int main(int argc,char* argv[])
 {
@@ -111,44 +66,37 @@ int main(int argc,char* argv[])
     GetHandles(clientID);
     for (int i=0; i < 6;i++)q[i]=0.0;
 
+    double dt = 0.01; // Coppelia's time step
+
     if (clientID!=-1)
     {
         int nbloop=100;
         simxSynchronous(clientID,true);       // Enable the synchronous mode (Blocking function call)
         simxStartSimulation(clientID, simx_opmode_oneshot);
-
-        float t=0.0;
-        float tfinal=5;
-        float dt=0.01;
-        float q0m=0.5;
-        float q1m=0.5;
-        float q2m=0.6;
-        float w=2*M_PI/2.5;
        
         int offsetTime=simxGetLastCmdTime(clientID)/1000;
 
         Eigen::VectorXd qf(6); qf << 0.0, 40.5, 35.0, 0.0, 59.5, 0.0;
         qf = qf * M_PI / 180.0;  // Convert to radians
-        robot.simuTrapezePosition(clientID, handles, qf, 1.0, 0.01);
+        robot.simuTrapezePosition(clientID, handles, qf, 1.0, dt);
 
+        sleep(1);
+  
+        auto [T, MT] = robot.MGD();
 
-        /*
-        while (t < tfinal) {
-           printf("Current time: %6.4f\n", t);
-           //GetJointPos(clientId,qr);
-           q[0]=q0m*sin(w*t);
-           //if (t>2) q[0]=0.4;
-           //else
-           //q[0]=0;
-           
-           //q[1]=-q1m*sin(2*w*t);
-           //q[2]=q2m*sin(4*w*t);
-           SetJointPos(clientID, q);
-           //simxSynchronousTrigger(clientID);
-           t+=dt;
-           usleep(dt*1000*1000);
-        }
-        */
+        Eigen::Vector3d Pd; Pd << T(1,3), -T(0,3), T(2,3);
+        Eigen::Matrix3d Ad = T.block<3,3>(0,0);
+        Eigen::Vector3d xdot; xdot << -0.1, -0.1, 0.0;
+        Eigen::Vector3d omega_dot = Eigen::Vector3d::Zero();
+        double Kp = 1.0;
+        double K0 = 1.0;
+        double lambda_L = 0.1;
+
+        robot.cmdCinematique(clientID, handles, Pd, Ad, xdot, omega_dot, Kp, K0, dt, lambda_L);
+
+        Pd << -T(0,3), T(1,3), T(2,3);
+        xdot << -0.1, 0.1, 0.0;
+        robot.cmdCinematique(clientID, handles, Pd, Ad, xdot, omega_dot, Kp, K0, dt, lambda_L);
 
         simxStopSimulation(clientID, simx_opmode_oneshot);
 
