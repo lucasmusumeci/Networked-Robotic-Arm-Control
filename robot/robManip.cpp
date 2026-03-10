@@ -1,5 +1,6 @@
 #include "robManip.hpp"
 #include <cmath>
+#include <iostream>
 
 using namespace Eigen;
 
@@ -146,13 +147,13 @@ Trapeze Robot::calculTrapeze(const VectorXd& qi,
     }
 
     // Final per-joint velocities and accelerations
-    VectorXd Vi_max(N), ai(N);
+    VectorXd V_max(N), a_max(N);
     for (int i = 0; i < N; ++i) {
-        Vi_max(i) = dq(i) / t2;
-        ai(i)     = dq(i) / (t2 * t1);
+        V_max(i) = dq(i) / t2;
+        a_max(i)     = dq(i) / (t2 * t1);
     }
 
-    return {t1, t2, tf, Vi_max, ai};
+    return {t1, t2, tf, V_max, a_max};
 }
 
 MatrixXd Robot::calculQ(const VectorXd& qi,
@@ -166,32 +167,57 @@ MatrixXd Robot::calculQ(const VectorXd& qi,
         double tk = t(k);
         for (int i = 0; i < N; ++i) {
             if (tk < trap.t1) {
-                q(k,i) = 0.5 * trap.ai(i) * tk*tk + qi(i);
+                q(k,i) = 0.5 * trap.a_max(i) * tk*tk + qi(i);
             } else if (tk < trap.t2) {
-                q(k,i) = 0.5 * trap.ai(i) * trap.t1*trap.t1
+                q(k,i) = 0.5 * trap.a_max(i) * trap.t1*trap.t1
                         + qi(i)
-                        + trap.Vi_max(i) * (tk - trap.t1);
+                        + trap.V_max(i) * (tk - trap.t1);
             } else if (tk < trap.tf) {
                 double dt = tk - trap.t2;
-                q(k,i) = 0.5 * trap.ai(i) * trap.t1*trap.t1
+                q(k,i) = 0.5 * trap.a_max(i) * trap.t1*trap.t1
                         + qi(i)
-                        + trap.Vi_max(i) * (trap.t2 - trap.t1)
-                        + trap.Vi_max(i) * dt
-                        - 0.5 * trap.ai(i) * dt*dt;
+                        + trap.V_max(i) * (trap.t2 - trap.t1)
+                        + trap.V_max(i) * dt
+                        - 0.5 * trap.a_max(i) * dt*dt;
             } else {
-                q(k,i) = trap.t2 * trap.Vi_max(i) + qi(i);
+                q(k,i) = trap.t2 * trap.V_max(i) + qi(i);
             }
         }
     }
     return q;
 }
 
+MatrixXd Robot::calculQdot(const VectorXd& qi,
+                         const Trapeze& trap,
+                         const VectorXd& t) const {
+    int N  = getN();
+    int K  = static_cast<int>(t.size());
+    MatrixXd qdot(K, N);
+
+    for (int k = 0; k < K; ++k) {
+        double tk = t(k);
+        for (int i = 0; i < N; ++i) {
+            if (tk < trap.t1) {
+                qdot(k,i) = trap.a_max(i) * tk;
+            } else if (tk < trap.t2) {
+                qdot(k,i) = trap.V_max(i);
+            } else if (tk < trap.tf) {
+                double dt = tk - trap.t2;
+                qdot(k,i) = trap.V_max(i) - trap.a_max(i) * dt;
+            } else {
+                qdot(k,i) = 0;
+            }
+        }
+    }
+    return qdot;
+}
+
 /*
  * Simulation methods
  */
 
-void Robot::simuTrapezePosition(int clientID, int *handles, const VectorXd& qf,
-                                double duree, double dt)
+void Robot::simuTrapeze(int clientID, int *handles, const VectorXd& qf,
+                                double duree, double dt, CmdType_t cmdType)
 {
     // Build time vector
     Trapeze trap = calculTrapeze(theta, qf, duree);
@@ -205,13 +231,28 @@ void Robot::simuTrapezePosition(int clientID, int *handles, const VectorXd& qf,
     // Evaluate full trajectory
     MatrixXd q = calculQ(theta, trap, t_vec);
 
-    // Step through and send position commands
-    for (int k = 0; k < K; ++k) {
-        for (int i=0; i < 6; i++) {
-            simxSetJointTargetPosition(clientID, handles[i], q(k,i), simx_opmode_oneshot);
+    switch (cmdType)
+    {
+    case POSITION:
+        for (int k = 0; k < K; ++k) {
+            for (int i=0; i < 6; i++) {
+                simxSetJointTargetPosition(clientID, handles[i], q(k,i), simx_opmode_oneshot);
+            }
+            simxSynchronousTrigger(clientID);
+            theta = q.row(k);
         }
-        simxSynchronousTrigger(clientID);
-        theta = q.row(k);
+        break;
+    
+    case VELOCITY:
+        MatrixXd qdot = calculQdot(theta, trap, t_vec);
+        for (int k = 0; k < K; ++k) {
+            for (int i=0; i < 6; i++) {
+                simxSetJointTargetVelocity(clientID, handles[i], qdot(k,i), simx_opmode_oneshot);
+            }
+            simxSynchronousTrigger(clientID);
+            theta = q.row(k);
+        }        
+        break;
     }
 }
 
@@ -225,7 +266,8 @@ void Robot::simuTrapezePosition(int clientID, int *handles, const VectorXd& qf,
                             const Vector3d&  dPd,
                             const Vector3d&  omega_d,
                             double Kp, double K0, double dt,
-                            double lambda_L)
+                            double alpha, double lambda_L, 
+                            CmdType_t cmdType)
 {
     VectorXd qc = theta;
 
@@ -235,8 +277,25 @@ void Robot::simuTrapezePosition(int clientID, int *handles, const VectorXd& qf,
 
     Vector3d eps0 = Vector3d::Ones();  // to enter loop
     int iter = 0;
+    int N = getN();
 
-    while ((Pe - Pd).norm() > 1e-2 || eps0.norm() > 1e-2) {
+    double threshold_position = 1e-2;
+    double threshold_orientation = 1e-2;
+
+    switch (cmdType)
+    {
+    case POSITION:
+        threshold_position = 1e-2;
+        threshold_orientation = 1e-2;
+        break;
+    case VELOCITY:
+        threshold_position = 1e-2;
+        threshold_orientation = 1e-2;
+        break;
+    }
+
+
+    while ((Pe - Pd).norm() > threshold_position || eps0.norm() > threshold_orientation) {
         if (++iter > 2000) break;
 
         // Orientation error
@@ -250,7 +309,7 @@ void Robot::simuTrapezePosition(int clientID, int *handles, const VectorXd& qf,
             omega_e = omega_d;
         } else {
             Matrix3d L = calcul_L(Ad, Ae);
-            // Damped pseudo-inverse of L to avoid numerical blow-up
+            // Damped pseudo-inverse of L to avoid numerical blow-up near singularities
             Matrix3d L_pinv = L.transpose() *
                               (L * L.transpose() + lambda_L*lambda_L * Matrix3d::Identity()).inverse();
             omega_e = L_pinv * (K0 * eps0 + L.transpose() * omega_d);
@@ -264,14 +323,10 @@ void Robot::simuTrapezePosition(int clientID, int *handles, const VectorXd& qf,
         Matrix<double,6,1> xdot;
         xdot << dPe, omega_e;
 
-        // Damped least-squares (Levenberg-Marquardt pseudo-inverse)
-        const double lambda_J = 1e-4;
-        int N = getN();
-        MatrixXd JJt = J * J.transpose();
-        JJt += lambda_J * MatrixXd::Identity(6,6);
-        VectorXd dq = J.transpose() * JJt.ldlt().solve(xdot);
+        // Eloignement des butées articulaires
+        VectorXd dq = eloignement_butees_articulaires(J, xdot, alpha);
 
-        // ── Clamp and integrate ──────────────────────────────────────────────
+        // Clamp and integrate
         for (int i = 0; i < N; ++i)
             dq(i) = std::clamp(dq(i), -V_max(i), V_max(i));
 
@@ -281,17 +336,63 @@ void Robot::simuTrapezePosition(int clientID, int *handles, const VectorXd& qf,
             qc(i) = std::clamp(qc(i), q_min(i), q_max(i));
 
         // Send command to CoppeliaSim
-        for (int i=0; i < 6; i++) {
-            simxSetJointTargetPosition(clientID, handles[i], qc(i), simx_opmode_oneshot);
+        switch (cmdType)
+        {
+        case POSITION:
+            for (int i=0; i < 6; i++) {
+                simxSetJointTargetPosition(clientID, handles[i], qc(i), simx_opmode_oneshot);
+            }
+            break;
+        
+        case VELOCITY:
+            for (int i=0; i < 6; i++) {
+                simxSetJointTargetVelocity(clientID, handles[i], dq(i), simx_opmode_oneshot);
+            }
+            break;
         }
+
         simxSynchronousTrigger(clientID);
 
-        // ── Update state ─────────────────────────────────────────────────────
-        theta = qc;
+        // Update state
+        // theta = qc;
+        for (int i=0; i < 6; i++) {
+            simxFloat mesured_q;
+            simxGetJointPosition(clientID, handles[i], &mesured_q, simx_opmode_buffer);
+            theta(i) = static_cast<double>(mesured_q);
+        }
+        
         auto [Te_new, MT_new] = MGD();
         Ae = Te_new.block<3,3>(0,0);
         Pe = Te_new.block<3,1>(0,3);
     }
+}
+
+Eigen::VectorXd Robot::eloignement_butees_articulaires(const Eigen::MatrixXd& J,
+                                                      const Eigen::VectorXd& Xdot,
+                                                      double alpha) const
+{
+    int n = getN();
+    
+    // Pseudo-inverse of Jacobian
+    Eigen::MatrixXd J_pinv = J.completeOrthogonalDecomposition().pseudoInverse();
+    
+    // Compute potential function gradient ∇φ using member limits q_min and q_max
+    Eigen::VectorXd theta_moy = (q_max + q_min) / 2.0;
+    Eigen::VectorXd theta_range = q_max - q_min;
+    
+    // Element-wise: ∇ϕ = 2 * (θ - θmoy) / (θrange²)
+    Eigen::VectorXd grad_phi(n);
+    for (int i = 0; i < n; ++i) {
+        grad_phi(i) = 2.0 * (theta(i) - theta_moy(i)) / (theta_range(i) * theta_range(i));
+    }
+    
+    // Main equation: θ̇ = J⁺Ẋ + (I - J⁺J)α∇φ
+    Eigen::MatrixXd I = Eigen::MatrixXd::Identity(n, n);
+    Eigen::MatrixXd null_space = I - J_pinv * J;
+    
+    Eigen::VectorXd theta_dot = J_pinv * Xdot + alpha * null_space * grad_phi;
+    
+    return theta_dot;
 }
 
 

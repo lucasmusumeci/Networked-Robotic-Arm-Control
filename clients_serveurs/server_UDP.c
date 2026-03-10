@@ -27,20 +27,20 @@ int main (int nba, char *arg[])
 	struct mesg message;
 	int result, nsend;
 	struct sockaddr_in sockAddr, sock;
-	int serveur, client, err, nConnect, longaddr;
+	int client, err, nConnect, longaddr;
 	int n , i, results, resultr ;
 	long int  Te;
 	double  Un,  Sn,  Snp , K;
 	double tau, dt, A, B;
 	int Rt;
 
-	serveur=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
+	client=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
 	sockAddr.sin_family=PF_INET;
 	sockAddr.sin_port=htons(2000);
 	sockAddr.sin_addr.s_addr=inet_addr("127.0.0.1");
 	longaddr=sizeof(sockAddr);
 
-	err=bind(serveur,(struct sockaddr*)&sockAddr,longaddr);
+	err=bind(client,(struct sockaddr*)&sockAddr,longaddr);
 	if(err==ERROR)
 	{
 		printf("\n erreur de bind du serveur UDP!! \n");
@@ -56,22 +56,22 @@ int main (int nba, char *arg[])
 	results=ERROR;
 	resultr=ERROR;
 
-	fcntl(serveur,F_SETFL,fcntl(serveur,F_GETFL) | O_NONBLOCK);
+	fcntl(client,F_SETFL,fcntl(client,F_GETFL) | O_NONBLOCK);
 
 	do
 	{
 		usleep(Te);
 
-		resultr=recvfrom(serveur,&message,sizeof(message), 0,(struct sockaddr*)&sockAddr,&longaddr);
+		resultr=recvfrom(client,&message,sizeof(message), 0,(struct sockaddr*)&sockAddr,&longaddr);
 
 		printf("--- server --- \n label=%lf rt=%d rr=%d\n time=%ld.%ld\n",message.label,results,resultr,message.time.tv_sec,message.time.tv_usec);
 
-		results=sendto(serveur,&message,sizeof(message),0,(struct sockaddr*)&sockAddr,sizeof(sockAddr));
+		results=sendto(client,&message,sizeof(message),0,(struct sockaddr*)&sockAddr,sizeof(sockAddr));
 
 	}while(message.label<100.0);
 
 	usleep(Te);
-	close(serveur);
+	close(client);
 
 	return 0;
 

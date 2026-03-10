@@ -66,7 +66,14 @@ int main(int argc,char* argv[])
     GetHandles(clientID);
     for (int i=0; i < 6;i++)q[i]=0.0;
 
-    double dt = 0.01; // Coppelia's time step
+    double dt = 0.025; // Coppelia's time step
+
+    CmdType_t cmdType = VELOCITY;
+
+    // Initialize streaming for joint positions (no blocking)
+    for (int i = 0; i < 6; i++) {
+        simxGetJointPosition(clientID, handles[i], nullptr, simx_opmode_streaming);
+    }
 
     if (clientID!=-1)
     {
@@ -78,7 +85,7 @@ int main(int argc,char* argv[])
 
         Eigen::VectorXd qf(6); qf << 0.0, 40.5, 35.0, 0.0, 59.5, 0.0;
         qf = qf * M_PI / 180.0;  // Convert to radians
-        robot.simuTrapezePosition(clientID, handles, qf, 1.0, dt);
+        robot.simuTrapeze(clientID, handles, qf, 3.0, dt, cmdType);
 
         sleep(1);
   
@@ -86,17 +93,20 @@ int main(int argc,char* argv[])
 
         Eigen::Vector3d Pd; Pd << T(1,3), -T(0,3), T(2,3);
         Eigen::Matrix3d Ad = T.block<3,3>(0,0);
-        Eigen::Vector3d xdot; xdot << -0.1, -0.1, 0.0;
+        //Eigen::Vector3d xdot; xdot << -0.05, -0.05, 0.0;
+        Eigen::Vector3d xdot; xdot << 0.0, 0.0, 0.0;
         Eigen::Vector3d omega_dot = Eigen::Vector3d::Zero();
-        double Kp = 1.0;
+        double Kp = 0.5;
         double K0 = 1.0;
         double lambda_L = 0.1;
+        double alpha = -2;
 
-        robot.cmdCinematique(clientID, handles, Pd, Ad, xdot, omega_dot, Kp, K0, dt, lambda_L);
+        robot.cmdCinematique(clientID, handles, Pd, Ad, xdot, omega_dot, Kp, K0, dt, alpha, lambda_L, cmdType);
 
         Pd << -T(0,3), T(1,3), T(2,3);
-        xdot << -0.1, 0.1, 0.0;
-        robot.cmdCinematique(clientID, handles, Pd, Ad, xdot, omega_dot, Kp, K0, dt, lambda_L);
+        //xdot << -0.05, 0.05, 0.0;
+        xdot << 0.0, 0.0, 0.0;
+        robot.cmdCinematique(clientID, handles, Pd, Ad, xdot, omega_dot, Kp, K0, dt, alpha, lambda_L, cmdType);
 
         simxStopSimulation(clientID, simx_opmode_oneshot);
 

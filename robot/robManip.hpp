@@ -14,8 +14,13 @@ struct Trapeze {
     double t1;               // acceleration phase end
     double t2;               // constant velocity phase end
     double tf;               // total duration
-    Eigen::VectorXd Vi_max;  // max velocity per joint
-    Eigen::VectorXd ai;      // acceleration per joint
+    Eigen::VectorXd V_max;   // max velocity per joint
+    Eigen::VectorXd a_max;   // max acceleration per joint
+};
+
+enum CmdType_t {
+    POSITION,
+    VELOCITY
 };
 
 class Robot 
@@ -88,14 +93,13 @@ public:
     Eigen::MatrixXd calculQ(const Eigen::VectorXd& qi,
                             const Trapeze& trapeze,
                             const Eigen::VectorXd& t) const;
-    Eigen::MatrixXd cmdPoly5(const Eigen::VectorXd& qi,
-                             const Eigen::VectorXd& qf,
-                             double tf) const;
+    Eigen::MatrixXd calculQdot(const Eigen::VectorXd& qi,
+                            const Trapeze& trapeze,
+                            const Eigen::VectorXd& t) const;                        
 
     // Simulation methods
-    void simuTrapezePosition(int clientID, int *handles,const Eigen::VectorXd& qf,
-                             double duree, double dt);
-
+    void simuTrapeze(int clientID, int *handles,const Eigen::VectorXd& qf,
+                             double duree, double dt, CmdType_t cmdType = POSITION);
     // Commande cinématique
     void cmdCinematique(int clientID, int *handles,
                         const Eigen::Vector3d&  Pd,
@@ -103,10 +107,13 @@ public:
                         const Eigen::Vector3d&  dPd,
                         const Eigen::Vector3d&  omega_d,
                         double Kp, double K0, double dt,
-                        double lambda_L);
+                        double alpha, double lambda_L,
+                        CmdType_t cmdType = POSITION);
 
-
-    
+    // Joint limit avoidance using null-space redundancy
+    Eigen::VectorXd eloignement_butees_articulaires(const Eigen::MatrixXd& J,
+                                                    const Eigen::VectorXd& Xdot,
+                                                    double alpha) const;
 
 };
 
