@@ -91,21 +91,21 @@ int main(int argc,char* argv[])
   
         auto [T, MT] = robot.MGD();
 
-        Eigen::Vector3d Pd; Pd << T(1,3), -T(0,3), T(2,3);
+        Eigen::Vector3d Pd; Pd << -T(1,3), -T(0,3), T(2,3);
         Eigen::Matrix3d Ad = T.block<3,3>(0,0);
-        //Eigen::Vector3d xdot; xdot << -0.05, -0.05, 0.0;
-        Eigen::Vector3d xdot; xdot << 0.0, 0.0, 0.0;
+        Eigen::Vector3d xdot; xdot << -0.01, -0.01, 0.0;
+        //Eigen::Vector3d xdot; xdot << 0.0, 0.0, 0.0;
         Eigen::Vector3d omega_dot = Eigen::Vector3d::Zero();
-        double Kp = 0.5;
-        double K0 = 1.0;
+        double Kp = 0.2;
+        double K0 = 0.5;
         double lambda_L = 0.1;
         double alpha = -2;
 
         robot.cmdCinematique(clientID, handles, Pd, Ad, xdot, omega_dot, Kp, K0, dt, alpha, lambda_L, cmdType);
 
         Pd << -T(0,3), T(1,3), T(2,3);
-        //xdot << -0.05, 0.05, 0.0;
-        xdot << 0.0, 0.0, 0.0;
+        xdot << -0.01, 0.01, 0.0;
+        //xdot << 0.0, 0.0, 0.0;
         robot.cmdCinematique(clientID, handles, Pd, Ad, xdot, omega_dot, Kp, K0, dt, alpha, lambda_L, cmdType);
 
         simxStopSimulation(clientID, simx_opmode_oneshot);

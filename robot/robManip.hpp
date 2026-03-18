@@ -124,4 +124,8 @@ Robot CreateRobotisH(const Eigen::VectorXd& initialTheta);
 Eigen::Matrix3d RTL2R(double phi, double theta, double psi);
 Eigen::Vector3d R2RTL(const Eigen::Matrix3d& R);
 
+// Communication with simulator
+void sendCmd(int clientID, int *handles, const Eigen::VectorXd& q, CmdType_t cmdType);
+void getJointPosition(int clientID, int jointHandle, double* position);
+
 #endif // ROBOT_KINEMATICS_HPP

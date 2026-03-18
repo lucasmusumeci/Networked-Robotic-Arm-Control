@@ -122,6 +122,7 @@ int main (int nba, char *arg[])
         {
             gettimeofday(&tab_msg[empty_slot].time_to_send, NULL);
 
+			// Random delay
 			int delay_ms = gsl_ran_poisson(rng, 500.0);
 
             tab_msg[empty_slot].time_to_send.tv_sec += delay_ms/1000;

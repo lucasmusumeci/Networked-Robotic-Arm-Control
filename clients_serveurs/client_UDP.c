@@ -12,12 +12,12 @@
 
 #include <sys/time.h>
 
-struct mesg {
+typedef struct {
 	double label;
 	double position[1];
 	double control[1];
 	struct timeval time;
-};
+}msg_t;
 
 #define ERROR (-1)
 
@@ -27,7 +27,7 @@ int main (int nba, char *arg[])
 	int result;
 	int nsend;
 	int nconnect;
-	struct mesg message;
+	msg_t message;
 	int addr;
 	long int Te;
 

@@ -235,10 +235,7 @@ void Robot::simuTrapeze(int clientID, int *handles, const VectorXd& qf,
     {
     case POSITION:
         for (int k = 0; k < K; ++k) {
-            for (int i=0; i < 6; i++) {
-                simxSetJointTargetPosition(clientID, handles[i], q(k,i), simx_opmode_oneshot);
-            }
-            simxSynchronousTrigger(clientID);
+            sendCmd(clientID, handles, q.row(k), POSITION);
             theta = q.row(k);
         }
         break;
@@ -246,10 +243,7 @@ void Robot::simuTrapeze(int clientID, int *handles, const VectorXd& qf,
     case VELOCITY:
         MatrixXd qdot = calculQdot(theta, trap, t_vec);
         for (int k = 0; k < K; ++k) {
-            for (int i=0; i < 6; i++) {
-                simxSetJointTargetVelocity(clientID, handles[i], qdot(k,i), simx_opmode_oneshot);
-            }
-            simxSynchronousTrigger(clientID);
+            sendCmd(clientID, handles, qdot.row(k), VELOCITY);
             theta = q.row(k);
         }        
         break;
@@ -339,26 +333,18 @@ void Robot::simuTrapeze(int clientID, int *handles, const VectorXd& qf,
         switch (cmdType)
         {
         case POSITION:
-            for (int i=0; i < 6; i++) {
-                simxSetJointTargetPosition(clientID, handles[i], qc(i), simx_opmode_oneshot);
-            }
+            sendCmd(clientID, handles, qc, POSITION);
             break;
         
         case VELOCITY:
-            for (int i=0; i < 6; i++) {
-                simxSetJointTargetVelocity(clientID, handles[i], dq(i), simx_opmode_oneshot);
-            }
+            sendCmd(clientID, handles, dq, VELOCITY);
             break;
         }
-
-        simxSynchronousTrigger(clientID);
 
         // Update state
         // theta = qc;
         for (int i=0; i < 6; i++) {
-            simxFloat mesured_q;
-            simxGetJointPosition(clientID, handles[i], &mesured_q, simx_opmode_buffer);
-            theta(i) = static_cast<double>(mesured_q);
+            getJointPosition(clientID, handles[i], &theta(i));
         }
         
         auto [Te_new, MT_new] = MGD();
@@ -461,4 +447,29 @@ Vector3d R2RTL(const Matrix3d& R) {
     double phi   = std::atan2(R(1, 0), R(0, 0));
     double psi   = std::atan2(R(2, 1), R(2, 2));
     return Vector3d(phi, theta, psi);
+}
+
+/*
+ * Communication with simulator
+ */
+void sendCmd(int clientID, int *handles, const Eigen::VectorXd& q, CmdType_t cmdType) {
+    for (int i = 0; i < q.size(); i++) {
+        if (cmdType == POSITION) {
+            // Implementation for sending position command
+            simxSetJointTargetPosition(clientID, handles[i], q(i), simx_opmode_oneshot);
+
+        } else if (cmdType == VELOCITY) {
+            // Implementation for sending velocity command
+            simxSetJointTargetVelocity(clientID, handles[i], q(i), simx_opmode_oneshot);
+        }
+    }
+    // Trigger a simulation step
+    simxSynchronousTrigger(clientID);
+}
+
+void getJointPosition(int clientID, int jointHandle, double* position) {
+    // Implementation for getting joint position
+    simxFloat mesured_q;
+    simxGetJointPosition(clientID, jointHandle, &mesured_q, simx_opmode_buffer);
+    *position = static_cast<double>(mesured_q);
 }
