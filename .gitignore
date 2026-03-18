@@ -3,6 +3,7 @@ Debug/
 Release/
 build/
 out/
+old_client_serveur/
 
 # Fichiers objets et binaires
 *.o

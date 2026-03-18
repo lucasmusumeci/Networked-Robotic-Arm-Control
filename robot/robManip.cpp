@@ -448,28 +448,3 @@ Vector3d R2RTL(const Matrix3d& R) {
     double psi   = std::atan2(R(2, 1), R(2, 2));
     return Vector3d(phi, theta, psi);
 }
-
-/*
- * Communication with simulator
- */
-void sendCmd(int clientID, int *handles, const Eigen::VectorXd& q, CmdType_t cmdType) {
-    for (int i = 0; i < q.size(); i++) {
-        if (cmdType == POSITION) {
-            // Implementation for sending position command
-            simxSetJointTargetPosition(clientID, handles[i], q(i), simx_opmode_oneshot);
-
-        } else if (cmdType == VELOCITY) {
-            // Implementation for sending velocity command
-            simxSetJointTargetVelocity(clientID, handles[i], q(i), simx_opmode_oneshot);
-        }
-    }
-    // Trigger a simulation step
-    simxSynchronousTrigger(clientID);
-}
-
-void getJointPosition(int clientID, int jointHandle, double* position) {
-    // Implementation for getting joint position
-    simxFloat mesured_q;
-    simxGetJointPosition(clientID, jointHandle, &mesured_q, simx_opmode_buffer);
-    *position = static_cast<double>(mesured_q);
-}

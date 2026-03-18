@@ -15,10 +15,11 @@
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_randist.h>
 
+#define NB_JOINTS 6
 typedef struct {
-	double label;
-	double position[1];
-	double control[1];
+	double q_cmd[NB_JOINTS];
+	double q_simu[NB_JOINTS];
+	int cmdType;
 	struct timeval time;
 }msg_t;
 
@@ -47,7 +48,6 @@ int find_empty_slot(msg_delay_t *buffer, int size)
 }
 
 #define ERROR (-1)
-#define DELAY_S 0
 #define DELAY_US 500000 // 500ms
 
 int main (int nba, char *arg[])
@@ -74,10 +74,6 @@ int main (int nba, char *arg[])
 	sockAddr_client.sin_addr.s_addr=inet_addr("127.0.0.1");
 	addr_client=sizeof(sockAddr_client);
 
-	message_client.label=0.0;
-	message_client.position[0]=0.0;
-	message_client.control[0]=0;
-
 	fcntl(client,F_SETFL,fcntl(client,F_GETFL) | O_NONBLOCK);
 
     // Serveur (1) (127.0.0.2)
@@ -99,12 +95,7 @@ int main (int nba, char *arg[])
 		printf("\n erreur de bind du serveur UDP!! \n");
 	}
 
-	message_serveur.label=0.0;
-	message_serveur.position[0]=0.0;
-	message_serveur.control[0]=0.0;
-
-
-	long int  Te=100000; // Te=100ms
+	long int  Te=25000; // Te=25ms
 
 	results_serveur=ERROR;
 	resultr_serveur=ERROR;
@@ -123,14 +114,15 @@ int main (int nba, char *arg[])
             gettimeofday(&tab_msg[empty_slot].time_to_send, NULL);
 
 			// Random delay
-			int delay_ms = gsl_ran_poisson(rng, 500.0);
+			//int delay_ms = gsl_ran_poisson(rng, 500.0);
 
-            tab_msg[empty_slot].time_to_send.tv_sec += delay_ms/1000;
-            tab_msg[empty_slot].time_to_send.tv_usec += (delay_ms%1000)*1000;
+			int delay_us = DELAY_US;
+            tab_msg[empty_slot].time_to_send.tv_sec += delay_us/1000000;
+            tab_msg[empty_slot].time_to_send.tv_usec += (delay_us%1000000);
             tab_msg[empty_slot].msg = message_serveur;
         }
 
-		printf("--- server --- \n label=%lf rt=%d rr=%d\n time=%ld.%ld\n",message_serveur.label,results_serveur,resultr_serveur,message_serveur.time.tv_sec,message_serveur.time.tv_usec);
+		printf("--- server --- \n rt=%d rr=%d\n time=%ld.%ld\n",results_serveur,resultr_serveur,message_serveur.time.tv_sec,message_serveur.time.tv_usec);
 
 		results_serveur=sendto(serveur,&message_serveur,sizeof(message_serveur),0,(struct sockaddr*)&sockAddr_serveur,sizeof(sockAddr_serveur));
 
@@ -157,9 +149,9 @@ int main (int nba, char *arg[])
 		
 		resultr_client=recvfrom(client,&message_client,sizeof(message_client), 0,(struct sockaddr*)&sockAddr_client,&addr_client);
 
-        printf("--- client --- \n  label=%lf rr=%d rs=%d\n time=%ld.%ld\n ",message_client.label,resultr_client, results_client, message_client.time.tv_sec,message_client.time.tv_usec);
+        printf("--- client --- \n rr=%d rs=%d\n time=%ld.%ld\n ",resultr_client, results_client, message_client.time.tv_sec,message_client.time.tv_usec);
 
-	}while(message_client.label<100.0);
+	}while(1);
 
 	usleep(Te);
     gsl_rng_free(rng);

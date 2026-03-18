@@ -39,6 +39,31 @@ void GetHandles(int clientID){
     }
 }
 
+/*
+ * Communication with simulator
+ */
+void sendCmd(int clientID, int *handles, const Eigen::VectorXd& q, CmdType_t cmdType) {
+    for (int i = 0; i < q.size(); i++) {
+        if (cmdType == POSITION) {
+            // Implementation for sending position command
+            simxSetJointTargetPosition(clientID, handles[i], q(i), simx_opmode_oneshot);
+        }
+        else if (cmdType == VELOCITY) {
+            // Implementation for sending velocity command
+            simxSetJointTargetVelocity(clientID, handles[i], q(i), simx_opmode_oneshot);
+        }
+    }
+    // Trigger a simulation step
+    simxSynchronousTrigger(clientID);
+}
+
+void getJointPosition(int clientID, int jointHandle, double* position) {
+    // Implementation for getting joint position
+    simxFloat mesured_q;
+    simxGetJointPosition(clientID, jointHandle, &mesured_q, simx_opmode_buffer);
+    *position = static_cast<double>(mesured_q);
+}
+
 int main(int argc,char* argv[])
 {
 
@@ -58,11 +83,6 @@ int main(int argc,char* argv[])
     // Connection to the server
     int clientID=simxStart((simxChar*)"127.0.0.1",portNb,true,true,timeOutInMs,commThreadCycleInMs);
 
-//    float q[7];
-//    for (int i=0; i < 6; i++) q[i]=0.0;
-
-    float q[6];
-    float qr[6];
     GetHandles(clientID);
     for (int i=0; i < 6;i++)q[i]=0.0;
 

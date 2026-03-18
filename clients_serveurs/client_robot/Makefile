@@ -11,7 +11,7 @@ CC=gcc -O3 $(USER_DEFINES)
 #     extApi.c, extApiPlatform.c 
 #
 PATH_ROBMANIP = /home/lucas/Documents/Polytech/S8/Autom_Reseaux/robot
-INCLUDE = -I/usr/include/eigen3
+INCLUDE = -I$(PATH_ROBMANIP) -I/usr/include/eigen3
 
 #
 # Targets

@@ -5,10 +5,6 @@
 #include <vector>
 #include <utility>
 
-extern "C" {
-    #include "extApi.h"
-}
-
 // Struct used for command trapeze
 struct Trapeze {
     double t1;               // acceleration phase end
