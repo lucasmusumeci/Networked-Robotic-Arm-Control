@@ -342,14 +342,19 @@ void Robot::simuTrapeze(int clientID, int *handles, const VectorXd& qf,
         }
 
         // Update state
-        // theta = qc;
-        for (int i=0; i < 6; i++) {
-            getJointPosition(clientID, handles[i], &theta(i));
-        }
+        //theta = qc;
+        getAllJointsPosition(clientID, handles, &theta);
         
         auto [Te_new, MT_new] = MGD();
         Ae = Te_new.block<3,3>(0,0);
         Pe = Te_new.block<3,1>(0,3);
+    }
+        
+    // Send null command to CoppeliaSim when in velocity mode to stop the robot
+    if (cmdType == VELOCITY)
+    {
+        VectorXd dq = VectorXd::Zero(getN());
+        sendCmd(clientID, handles, dq, VELOCITY);
     }
 }
 

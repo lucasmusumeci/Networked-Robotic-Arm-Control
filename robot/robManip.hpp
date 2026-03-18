@@ -122,6 +122,6 @@ Eigen::Vector3d R2RTL(const Eigen::Matrix3d& R);
 
 // Communication with simulator
 void sendCmd(int clientID, int *handles, const Eigen::VectorXd& q, CmdType_t cmdType);
-void getJointPosition(int clientID, int jointHandle, double* position);
+void getAllJointsPosition(int clientID, int *handles, Eigen::VectorXd *theta);
 
 #endif // ROBOT_KINEMATICS_HPP

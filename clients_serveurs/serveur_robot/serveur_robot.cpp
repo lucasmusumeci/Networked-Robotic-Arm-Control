@@ -58,43 +58,69 @@ int main (int nba, char *arg[])
     // Connection to the server
     int clientID=simxStart((simxChar*)"127.0.0.1",portNb,true,true,timeOutInMs,commThreadCycleInMs);
 
+    if (clientID==-1)
+    {
+        printf("Connection to the server not possible\n");
+        return(-1);
+    }
+
     GetHandles(clientID);
+
+    // Initialize streaming for joint positions (no blocking)
+    for (int i = 0; i < 6; i++) {
+        simxGetJointPosition(clientID, handles[i], nullptr, simx_opmode_streaming);
+    }
+
+    // Client de 127.0.0.3
+    int client;
+	socklen_t addr_client;
+	struct sockaddr_in sockAddr_client;
+
+	client=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
+	sockAddr_client.sin_family=PF_INET;
+	sockAddr_client.sin_port=htons(2000);
+	sockAddr_client.sin_addr.s_addr=inet_addr("127.0.0.3");
+	addr_client=sizeof(sockAddr_client);
+
+	fcntl(client,F_SETFL,fcntl(client,F_GETFL) | O_NONBLOCK);
 
 
 	// Serveur (127.0.0.1)
-	msg_t message;
-	int result, nsend;
-	struct sockaddr_in sockAddr, sock;
-	int client, err, nConnect;
-    socklen_t addr;
-	int results, resultr ;
-	long int  Te;
+    int serveur;
+    socklen_t addr_serveur;
+	struct sockaddr_in sockAddr_serveur;
 
-	client=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
-	sockAddr.sin_family=PF_INET;
-	sockAddr.sin_port=htons(2000);
-	sockAddr.sin_addr.s_addr=inet_addr("127.0.0.1");
-	addr=sizeof(sockAddr);
+	serveur=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
+	sockAddr_serveur.sin_family=PF_INET;
+	sockAddr_serveur.sin_port=htons(2000);
+	sockAddr_serveur.sin_addr.s_addr=inet_addr("127.0.0.1");
+	addr_serveur=sizeof(sockAddr_serveur);
 
-	err=bind(client,(struct sockaddr*)&sockAddr,addr);
-	if(err==ERROR)
+	int err_serveur = bind(serveur,(struct sockaddr*)&sockAddr_serveur,addr_serveur);
+	if(err_serveur==ERROR)
 	{
 		printf("\n erreur de bind du serveur UDP!! \n");
 	}
 
-	Te=100000; // Te=100ms
+	fcntl(serveur,F_SETFL,fcntl(serveur,F_GETFL) | O_NONBLOCK);
 
-	results=ERROR;
+    msg_t message;
+    int results, resultr;
+    results=ERROR;
 	resultr=ERROR;
-
-	fcntl(client,F_SETFL,fcntl(client,F_GETFL) | O_NONBLOCK);
 
 	do
 	{
 
-		resultr=recvfrom(client,&message,sizeof(message), 0,(struct sockaddr*)&sockAddr,&addr);
+		resultr=recvfrom(serveur,&message,sizeof(message), 0,(struct sockaddr*)&sockAddr_serveur,&addr_serveur);
 
-		printf("--- server --- \n rt=%d rr=%d\n time=%ld.%ld\n",results,resultr,message.time.tv_sec,message.time.tv_usec);
+        if(resultr != ERROR) {
+            struct timeval current_time;
+            gettimeofday(&current_time, NULL);
+            long int delay_us = (current_time.tv_sec - message.time.tv_sec) * 1000000 + (current_time.tv_usec - message.time.tv_usec);
+            printf("--- server --- \n delay= %d ms\n ", delay_us/1000);
+        }
+		//printf("--- server --- \n rt=%d rr=%d\n time=%ld.%ld\n",results,resultr,message.time.tv_sec,message.time.tv_usec);
 
         if (message.cmdType == 0)
         {
@@ -116,12 +142,31 @@ int main (int nba, char *arg[])
         // Trigger a simulation step
         simxSynchronousTrigger(clientID);
 
-		results=sendto(client,&message,sizeof(message),0,(struct sockaddr*)&sockAddr,sizeof(sockAddr));
+        for (int i = 0; i < 6; i++)
+        {
+            simxFloat mesured_q;
+            simxGetJointPosition(clientID, handles[i], &mesured_q, simx_opmode_buffer);
+            message.q_simu[i] = static_cast<double>(mesured_q);
+        }
+
+        printf("theta = [");
+        for (int i = 0; i < 6; ++i) {
+            printf("%f", message.q_simu[i]);
+            if (i < 5) printf(", ");
+        }
+        printf("]\n");
+
+		results=sendto(client,&message,sizeof(message),0,(struct sockaddr*)&sockAddr_client,sizeof(sockAddr_client));
 
 	}while(1);
 
-	usleep(Te);
 	close(client);
+    close(serveur);
+
+    simxStopSimulation(clientID, simx_opmode_oneshot);
+
+    // Close the connection to the server
+    simxFinish(clientID);
 
 	return 0;
 

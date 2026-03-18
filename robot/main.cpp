@@ -57,11 +57,13 @@ void sendCmd(int clientID, int *handles, const Eigen::VectorXd& q, CmdType_t cmd
     simxSynchronousTrigger(clientID);
 }
 
-void getJointPosition(int clientID, int jointHandle, double* position) {
-    // Implementation for getting joint position
-    simxFloat mesured_q;
-    simxGetJointPosition(clientID, jointHandle, &mesured_q, simx_opmode_buffer);
-    *position = static_cast<double>(mesured_q);
+void getAllJointsPosition(int clientID, int *handles, Eigen::VectorXd *theta) {
+    // Implementation for getting all joint positions
+    for (int i = 0; i < 6; i++) {
+        simxFloat mesured_q;
+        simxGetJointPosition(clientID, handles[i], &mesured_q, simx_opmode_buffer);
+        (*theta)(i) = static_cast<double>(mesured_q);
+    }
 }
 
 int main(int argc,char* argv[])
@@ -84,7 +86,6 @@ int main(int argc,char* argv[])
     int clientID=simxStart((simxChar*)"127.0.0.1",portNb,true,true,timeOutInMs,commThreadCycleInMs);
 
     GetHandles(clientID);
-    for (int i=0; i < 6;i++)q[i]=0.0;
 
     double dt = 0.025; // Coppelia's time step
 
