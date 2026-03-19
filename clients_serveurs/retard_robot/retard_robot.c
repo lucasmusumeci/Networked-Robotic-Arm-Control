@@ -17,9 +17,10 @@
 
 #define NB_JOINTS 6
 typedef struct {
+	int cmdType;
 	double q_cmd[NB_JOINTS];
 	double q_simu[NB_JOINTS];
-	int cmdType;
+	double qdot_simu[NB_JOINTS];
 	struct timeval time;
 }msg_t;
 
@@ -61,13 +62,12 @@ int main (int nba, char *arg[])
     // Client de 127.0.0.1
 	msg_t message_client;
 	int addr_client;
-
 	struct sockaddr_in sockAddr_client;
 	int client, results_client, resultr_client;
 
 	client=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
 	sockAddr_client.sin_family=PF_INET;
-	sockAddr_client.sin_port=htons(2000);
+	sockAddr_client.sin_port=htons(2001);
 	sockAddr_client.sin_addr.s_addr=inet_addr("127.0.0.1");
 	addr_client=sizeof(sockAddr_client);
 
@@ -75,18 +75,17 @@ int main (int nba, char *arg[])
 
     // Serveur (127.0.0.2)
 	msg_t message_serveur;
-	int result_serveur;
+	int addr_serveur;
 	struct sockaddr_in sockAddr_serveur;
-	int serveur, err_serveur, longaddr_serveur;
-	int results_serveur, resultr_serveur ;
+	int serveur, results_serveur, resultr_serveur ;
 
 	serveur=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
 	sockAddr_serveur.sin_family=PF_INET;
-	sockAddr_serveur.sin_port=htons(2001);
+	sockAddr_serveur.sin_port=htons(2002);
 	sockAddr_serveur.sin_addr.s_addr=inet_addr("127.0.0.2");
-	longaddr_serveur=sizeof(sockAddr_serveur);
+	addr_serveur=sizeof(sockAddr_serveur);
 
-	err_serveur=bind(serveur,(struct sockaddr*)&sockAddr_serveur,longaddr_serveur);
+	int err_serveur=bind(serveur,(struct sockaddr*)&sockAddr_serveur,addr_serveur);
 	if(err_serveur==ERROR)
 	{
 		printf("\n erreur de bind du serveur UDP!! \n");
@@ -105,7 +104,7 @@ int main (int nba, char *arg[])
 		usleep(Te);
 
         // Receive message from client
-		resultr_serveur=recvfrom(serveur,&message_serveur,sizeof(message_serveur), 0,(struct sockaddr*)&sockAddr_serveur,&longaddr_serveur);
+		resultr_serveur=recvfrom(serveur,&message_serveur,sizeof(message_serveur), 0,(struct sockaddr*)&sockAddr_serveur,&addr_serveur);
 
 		if(resultr_serveur != ERROR) {
             struct timeval current_time;

@@ -57,13 +57,18 @@ void sendCmd(int clientID, int *handles, const Eigen::VectorXd& q, CmdType_t cmd
     simxSynchronousTrigger(clientID);
 }
 
-void getAllJointsPosition(int clientID, int *handles, Eigen::VectorXd *theta) {
+int getAllJointsPosition(int clientID, int *handles, Eigen::VectorXd *theta) {
     // Implementation for getting all joint positions
     for (int i = 0; i < 6; i++) {
         simxFloat mesured_q;
-        simxGetJointPosition(clientID, handles[i], &mesured_q, simx_opmode_buffer);
-        (*theta)(i) = static_cast<double>(mesured_q);
+        if (simxGetJointPosition(clientID, handles[i], &mesured_q, simx_opmode_buffer) == simx_return_ok) {
+            (*theta)(i) = static_cast<double>(mesured_q);
+        } else {
+            return -1; // Return error
+        }
     }
+    return 0; // Return success
+
 }
 
 int main(int argc,char* argv[])

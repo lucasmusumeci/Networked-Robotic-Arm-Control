@@ -20,9 +20,10 @@ using namespace std;
 
 #define NB_JOINTS 6
 typedef struct {
+	int cmdType;
 	double q_cmd[NB_JOINTS];
 	double q_simu[NB_JOINTS];
-	int cmdType;
+	double qdot_simu[NB_JOINTS];
 	struct timeval time;
 }msg_t;
 
@@ -51,7 +52,7 @@ int main (int nba, char *arg[])
 	// Client de 127.0.0.2 (retard)
 	client=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
 	sockAddr_client.sin_family=PF_INET;
-	sockAddr_client.sin_port=htons(2001);
+	sockAddr_client.sin_port=htons(2002);
 	sockAddr_client.sin_addr.s_addr=inet_addr("127.0.0.2");
 	addr_client=sizeof(sockAddr_client);
 
@@ -62,7 +63,7 @@ int main (int nba, char *arg[])
 	// Serveur (127.0.0.3)
 	serveur=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
 	sockAddr_serveur.sin_family=PF_INET;
-	sockAddr_serveur.sin_port=htons(2000);
+	sockAddr_serveur.sin_port=htons(2003);
 	sockAddr_serveur.sin_addr.s_addr=inet_addr("127.0.0.3");
 	addr_serveur=sizeof(sockAddr_serveur);
 
@@ -89,8 +90,8 @@ int main (int nba, char *arg[])
 
     Eigen::Vector3d Pd; Pd << -T(1,3), -T(0,3), T(2,3);
     Eigen::Matrix3d Ad = T.block<3,3>(0,0);
-    Eigen::Vector3d xdot; xdot << -0.01, -0.01, 0.0;
-    //Eigen::Vector3d xdot; xdot << 0.0, 0.0, 0.0;
+    //Eigen::Vector3d xdot; xdot << -0.01, -0.01, 0.0;
+    Eigen::Vector3d xdot; xdot << 0.0, 0.0, 0.0;
     Eigen::Vector3d omega_dot = Eigen::Vector3d::Zero();
     double Kp = 0.2;
     double K0 = 0.5;
@@ -100,8 +101,8 @@ int main (int nba, char *arg[])
     robot.cmdCinematique(0, 0, Pd, Ad, xdot, omega_dot, Kp, K0, dt, alpha, lambda_L, VELOCITY);
 
 	Pd << -T(0,3), T(1,3), T(2,3);
-    xdot << -0.01, 0.01, 0.0;
-    //xdot << 0.0, 0.0, 0.0;
+    //xdot << -0.01, 0.01, 0.0;
+    xdot << 0.0, 0.0, 0.0;
     robot.cmdCinematique(0, 0, Pd, Ad, xdot, omega_dot, Kp, K0, dt, alpha, lambda_L, VELOCITY);
 
 	close(serveur);
@@ -128,24 +129,36 @@ void sendCmd(int clientID, int *handles, const Eigen::VectorXd& q, CmdType_t cmd
 	usleep(dt*1000000); // Sleep for the duration of the time step (replace syncrhonous mode in Coppelia)
 }
 
-void getAllJointsPosition(int clientID, int *handles, Eigen::VectorXd *theta)
+int getAllJointsPosition(int clientID, int *handles, Eigen::VectorXd *theta)
 {
-	int resultr = recvfrom(serveur,&message_serveur,sizeof(message_serveur), 0,(struct sockaddr*)&sockAddr_serveur,&addr_serveur);
 
-	if (resultr != -1)
+
+	int resultr = ERROR;
+	
+	while(recvfrom(serveur,&message_serveur,sizeof(message_serveur), 0,(struct sockaddr*)&sockAddr_serveur,&addr_serveur) != ERROR)
 	{
-		//double *q_simu = message_serveur.q_simu;
-		//printf("q = [%f , %f , %f , %f , %f , %f]",q_simu[0],q_simu[1],q_simu[2],q_simu[3],q_simu[4],q_simu[5]);
-		for(int i=0 ; i<NB_JOINTS ; i++)
-		{
-			(*theta)[i] = message_serveur.q_simu[i];
-		}
-
-		printf("theta = [");
-        for (int i = 0; i < 6; ++i) {
-            printf("%f", (*theta)(i));
-            if (i < 5) printf(", ");
-        }
-        printf("]\n");
+		resultr = 0; // Received at least 1 message
 	}
+
+	if (resultr == ERROR)
+	{
+		printf("Error receiving joint positions from server\n");
+		return -1; // Return error
+	}
+	
+	//double *q_simu = message_serveur.q_simu;
+	//printf("q = [%f , %f , %f , %f , %f , %f]",q_simu[0],q_simu[1],q_simu[2],q_simu[3],q_simu[4],q_simu[5]);
+	for(int i=0 ; i<NB_JOINTS ; i++)
+	{
+		(*theta)[i] = message_serveur.q_simu[i];
+	}
+
+	printf("theta = [");
+    for (int i = 0; i < 6; ++i) {
+        printf("%f", (*theta)(i));
+        if (i < 5) printf(", ");
+    }
+    printf("]\n");	
+
+    return 0; // Return success
 }

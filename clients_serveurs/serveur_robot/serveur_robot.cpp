@@ -20,9 +20,10 @@ extern "C" {
 
 #define NB_JOINTS 6
 typedef struct {
+    int cmdType;
 	double q_cmd[NB_JOINTS];
 	double q_simu[NB_JOINTS];
-	int cmdType;
+    double qdot_simu[NB_JOINTS];
 	struct timeval time;
 }msg_t;
 
@@ -78,7 +79,7 @@ int main (int nba, char *arg[])
 
 	client=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
 	sockAddr_client.sin_family=PF_INET;
-	sockAddr_client.sin_port=htons(2000);
+	sockAddr_client.sin_port=htons(2003);
 	sockAddr_client.sin_addr.s_addr=inet_addr("127.0.0.3");
 	addr_client=sizeof(sockAddr_client);
 
@@ -92,7 +93,7 @@ int main (int nba, char *arg[])
 
 	serveur=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
 	sockAddr_serveur.sin_family=PF_INET;
-	sockAddr_serveur.sin_port=htons(2000);
+	sockAddr_serveur.sin_port=htons(2001);
 	sockAddr_serveur.sin_addr.s_addr=inet_addr("127.0.0.1");
 	addr_serveur=sizeof(sockAddr_serveur);
 
@@ -142,21 +143,38 @@ int main (int nba, char *arg[])
         // Trigger a simulation step
         simxSynchronousTrigger(clientID);
 
+        int all_positions_ok = 1;
         for (int i = 0; i < 6; i++)
         {
             simxFloat mesured_q;
-            simxGetJointPosition(clientID, handles[i], &mesured_q, simx_opmode_buffer);
-            message.q_simu[i] = static_cast<double>(mesured_q);
+            if (simxGetJointPosition(clientID, handles[i], &mesured_q, simx_opmode_buffer) == simx_return_ok)
+            {
+                message.q_simu[i] = static_cast<double>(mesured_q);
+            }
+            else
+            {
+                printf("Error reading position for joint %d\n", i);
+                all_positions_ok = 0;
+            }
         }
 
-        printf("theta = [");
-        for (int i = 0; i < 6; ++i) {
-            printf("%f", message.q_simu[i]);
-            if (i < 5) printf(", ");
-        }
-        printf("]\n");
+        if (all_positions_ok)
+        {
+            /*
+            printf("theta = [");
+            for (int i = 0; i < 6; ++i) {
+                printf("%f", message.q_simu[i]);
+                if (i < 5) printf(", ");
+            }
+            printf("]\n");
+            */
 
-		results=sendto(client,&message,sizeof(message),0,(struct sockaddr*)&sockAddr_client,sizeof(sockAddr_client));
+            results=sendto(client,&message,sizeof(message),0,(struct sockaddr*)&sockAddr_client,sizeof(sockAddr_client));
+        }
+        else
+        {
+            printf("Skipping send due to position read errors\n");
+        }
 
 	}while(1);
 

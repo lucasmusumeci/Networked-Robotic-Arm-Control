@@ -343,7 +343,10 @@ void Robot::simuTrapeze(int clientID, int *handles, const VectorXd& qf,
 
         // Update state
         //theta = qc;
-        getAllJointsPosition(clientID, handles, &theta);
+        if(getAllJointsPosition(clientID, handles, &theta) == -1) {
+            std::cerr << "Error getting joint positions from simulator." << std::endl;
+            theta = qc; // Fallback to commanded position if reading fails
+        }
         
         auto [Te_new, MT_new] = MGD();
         Ae = Te_new.block<3,3>(0,0);
