@@ -21,6 +21,7 @@ using namespace std;
 #define NB_JOINTS 6
 typedef struct {
 	int cmdType;
+	int label; // used to easily identify the latest command sent by the client
 	double q_cmd[NB_JOINTS];
 	double q_simu[NB_JOINTS];
 	double qdot_simu[NB_JOINTS];
@@ -120,6 +121,7 @@ void sendCmd(int clientID, int *handles, const Eigen::VectorXd& q, CmdType_t cmd
 		message_client.q_cmd[i] = q(i);
 	}
 	message_client.cmdType = cmdType;
+	message_client.label++; // Increment the label to identify the latest command
 	gettimeofday(&message_client.time, NULL);
 
 	int results = sendto(client,&message_client,sizeof(message_client),0,(struct sockaddr*)&sockAddr_client,sizeof(sockAddr_client));
@@ -137,6 +139,7 @@ int getAllJointsPosition(int clientID, int *handles, Eigen::VectorXd *theta)
 	
 	while(recvfrom(serveur,&message_serveur,sizeof(message_serveur), 0,(struct sockaddr*)&sockAddr_serveur,&addr_serveur) != ERROR)
 	{
+		
 		resultr = 0; // Received at least 1 message
 	}
 

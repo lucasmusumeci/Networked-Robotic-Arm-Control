@@ -12,9 +12,6 @@
 
 #include <sys/time.h>
 
-#include <gsl/gsl_rng.h>
-#include <gsl/gsl_randist.h>
-
 #define NB_JOINTS 6
 typedef struct {
 	int cmdType;
@@ -54,7 +51,6 @@ int find_empty_slot(msg_delay_t *buffer, int size)
 int main (int nba, char *arg[])
 {
     msg_delay_t tab_msg[SIZE_MSG_BUFFER] = {};
-    gsl_rng *rng = gsl_rng_alloc(gsl_rng_mt19937);
     
     //double normal = gsl_ran_gaussian(rng, 1.0);  // stddev=1.0
     //int poisson = gsl_ran_poisson(rng, 5.0);     // lambda=5.0
@@ -118,9 +114,9 @@ int main (int nba, char *arg[])
         if (resultr_serveur != ERROR && empty_slot != -1)
         {
 			// Random delay
-			int delay_ms = gsl_ran_poisson(rng, 500.0);
-
-			//int delay_us = DELAY_US;
+			//int delay_ms = 20 + (random() % 981);
+			// Constant delay
+			int delay_ms = DELAY_US / 1000;
 			tab_msg[empty_slot].msg = message_serveur;
             tab_msg[empty_slot].time_to_send.tv_sec  = message_serveur.time.tv_sec  + delay_ms*1000/1000000;
             tab_msg[empty_slot].time_to_send.tv_usec = message_serveur.time.tv_usec + (delay_ms*1000)%1000000; 
@@ -162,7 +158,6 @@ int main (int nba, char *arg[])
 
 	}while(1);
 
-    gsl_rng_free(rng);
 	close(client);
 	close(serveur);
 	return 0;
