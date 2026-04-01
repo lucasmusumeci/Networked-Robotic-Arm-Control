@@ -12,6 +12,7 @@ old_client_serveur/
 *.so
 *.exe
 *.sqbpro
+*.csv
 
 # Makefiles générés automatiquement
 **/makefile
@@ -28,4 +29,3 @@ CMakeLists.txt
 
 # --- CoppeliaSim scene files ---
 *.ttt
-

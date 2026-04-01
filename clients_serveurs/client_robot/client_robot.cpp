@@ -22,13 +22,17 @@ using namespace std;
 typedef struct {
 	int cmdType;
 	int label; // used to easily identify the latest command sent by the client
-	double q_cmd[NB_JOINTS];
+	double cmd[NB_JOINTS];
 	double q_simu[NB_JOINTS];
 	double qdot_simu[NB_JOINTS];
 	struct timeval time;
 }msg_t;
 
 #define ERROR (-1)
+
+
+static const double tau[NB_JOINTS] = {0.008, 0.008, 0.007, 0.005, 0.004, 0.004};
+static const double Kc[NB_JOINTS] = {0.8, 0.8, 0.7, 0.5, 0.4, 0.4};
 
 /*
  *  Global variables for communication
@@ -46,7 +50,7 @@ msg_t message_client;
 int serveur;
 struct sockaddr_in sockAddr_serveur;
 socklen_t addr_serveur;
-msg_t message_serveur;
+msg_t latest_message_serveur; // Store the response from the server to the latest command sent by the client
 
 int main (int nba, char *arg[])
 {
@@ -117,8 +121,21 @@ int main (int nba, char *arg[])
  */
 void sendCmd(int clientID, int *handles, const Eigen::VectorXd& q, CmdType_t cmdType)
 {
-	for (int i = 0; i < NB_JOINTS; i++) {
-		message_client.q_cmd[i] = q(i);
+	double last_error[NB_JOINTS] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+
+	for (int i = 0; i < NB_JOINTS; i++)
+	{
+		switch (cmdType)
+		{
+		case POSITION:
+			last_error[i] = latest_message_serveur.cmd[i] - latest_message_serveur.q_simu[i];
+			break;
+		case VELOCITY:
+			last_error[i] = latest_message_serveur.cmd[i] - latest_message_serveur.qdot_simu[i];
+			break;
+		}
+		
+		message_client.cmd[i] = q(i) + Kc[i] * last_error[i]; // Add a simple proportional term to help with convergence
 	}
 	message_client.cmdType = cmdType;
 	message_client.label++; // Increment the label to identify the latest command
@@ -133,14 +150,16 @@ void sendCmd(int clientID, int *handles, const Eigen::VectorXd& q, CmdType_t cmd
 
 int getAllJointsPosition(int clientID, int *handles, Eigen::VectorXd *theta)
 {
-
-
 	int resultr = ERROR;
 	
-	while(recvfrom(serveur,&message_serveur,sizeof(message_serveur), 0,(struct sockaddr*)&sockAddr_serveur,&addr_serveur) != ERROR)
+	msg_t tmp; // Temporary variable to store last received message
+
+	while(recvfrom(serveur,&tmp,sizeof(tmp), 0,(struct sockaddr*)&sockAddr_serveur,&addr_serveur) != ERROR)
 	{
-		
 		resultr = 0; // Received at least 1 message
+		if(&tmp.time > &latest_message_serveur.time) {
+			latest_message_serveur = tmp; // Update to the latest message
+		}
 	}
 
 	if (resultr == ERROR)
@@ -153,7 +172,7 @@ int getAllJointsPosition(int clientID, int *handles, Eigen::VectorXd *theta)
 	//printf("q = [%f , %f , %f , %f , %f , %f]",q_simu[0],q_simu[1],q_simu[2],q_simu[3],q_simu[4],q_simu[5]);
 	for(int i=0 ; i<NB_JOINTS ; i++)
 	{
-		(*theta)[i] = message_serveur.q_simu[i];
+		(*theta)[i] = latest_message_serveur.q_simu[i];
 	}
 
 	printf("theta = [");

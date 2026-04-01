@@ -45,19 +45,19 @@ static const int N_IDENT = 6;
 
 // Velocity step amplitude per joint (rad/s).
 // Keep small enough to stay well within joint limits.
-static const double V_STEP[6] = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
+static const double V_STEP[6] = {0.1, 0.1, 0.1, 0.1, 0.1, 0.1};
 
 // Duration of the velocity step (s).
-static const double T_EXCITE = 2.0;
+static const double T_EXCITE = 0.1;
 
 // Duration of the zero-velocity tail phase (s).
-static const double T_REST = 1.0;
+static const double T_REST = 0.0;
 
 // Home pose — robot is moved here before every experiment.
 static const double HOME_DEG[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
 // Must match the simulation time step set in CoppeliaSim.
-static const double DT = 0.025;
+static const double DT = 0.001;
 
 /* ------------------------------------------------------------------ */
 /*  CoppeliaSim handles (global, filled by GetHandles)                 */
@@ -142,7 +142,7 @@ static void run_step_experiment(int clientID, Robot& robot, int joint_idx)
     const int K_rest   = (int)(T_REST   / DT);
 
     string fname = "joint" + to_string(joint_idx) + "_step.csv";
-    StepLogger logger(fname, joint_idx);
+    StepLogger logger(fname, joint_idx, clientID);
 
     printf("\n=== Joint %d: step %.3f rad/s for %.1f s ===\n",
            joint_idx, V_STEP[joint_idx], T_EXCITE);
@@ -245,7 +245,7 @@ int main(int argc, char *argv[])
 
         if (n > 0) {
             printf("Returning to home before joint %d...\n", j);
-            robot.simuTrapeze(clientID, handles, qhome, 3.0, DT, VELOCITY);
+            robot.simuTrapeze(clientID, handles, qhome, 0.0, DT, VELOCITY);
             sleep(1);
             if (getAllJointsPosition(clientID, handles, &q_init) == 0)
                 robot.setTheta(q_init);
