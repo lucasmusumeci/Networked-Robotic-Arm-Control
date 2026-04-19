@@ -31,7 +31,7 @@ typedef struct {
 
 
 static const double tau[NB_JOINTS] = {0.002, 0.002, 0.003, 0.002, 0.001, 0.001};
-static const double Kc[NB_JOINTS] = {0.8, 0.8, 0.7, 0.5, 0.4, 0.4};
+static const double G[NB_JOINTS] = {1.00, 1.00, 1.00, 1.00, 1.00, 1.00};
 
 /*
  * Time functions
@@ -103,6 +103,86 @@ int main (int nba, char *arg[])
 	// Initialize the robot model
 	Robot robot = CreateRobotisH(Eigen::VectorXd::Zero(6));
 
+	// Command trapeze to have the pencil on the ground
+	Eigen::VectorXd qf(6); qf << 180.0, 40.5, 35.0, 0.0, 59.5, 0.0;
+    qf = qf * M_PI / 180.0;  // Convert to radians
+
+	// --- ADAPTIVE CONTROL LOOP ---
+    Eigen::VectorXd q_mes(NB_JOINTS);
+    Eigen::VectorXd q_cmd(NB_JOINTS);
+    
+	// Safety Gain Margin (ideally between 0.2 and 0.6) the higher, the more oscillations
+	// /!\ Must be <1 in our case to ensure stability (KcG < 1)
+    double alpha = 1.5; 
+
+    printf("Starting adaptive control loop...\n");
+
+	int position_ok = 0;
+	int exit = false;
+    
+    while(!exit) {
+        // 1. Read current positions
+        if (getAllJointsPosition(0, 0, &q_mes) == ERROR) {
+            continue; // Wait for valid data to arrive
+        }
+
+        // 2. Measure dynamic Round-Trip Time (Tr) in seconds
+        struct timeval now;
+        gettimeofday(&now, NULL);
+        double Tr = diffTime_ms(&latest_message_serveur.time, &now) / 1000.0;
+		printf("Measured Round-Trip Time (Tr): %f seconds\n", Tr);
+        
+        if (Tr <= 0.001) Tr = 0.001; // Safety floor to prevent division by zero
+
+        // 3. Compute adaptive Kc and apply control law for each joint
+        double max_err = 0.0;
+        for (int i = 0; i < NB_JOINTS; i++) {
+            // Approximate ultimate frequency
+            double omega_u = M_PI / (2.0 * (Tr + tau[i]));
+            
+            // Calculate stability limit (K_max)
+            double K_max = (omega_u / G[i]) * sqrt(1.0 + pow(tau[i] * omega_u, 2));
+            
+            // Apply safety margin to get adaptive Kc
+            double Kc = alpha * K_max;
+            
+            // Calculate proportional velocity command
+            double err = qf(i) - q_mes(i);
+            q_cmd(i) = Kc * err;
+            
+            if (abs(err) > max_err) max_err = abs(err);
+        }
+
+        // 4. Send velocity command
+        sendCmd(0, 0, q_cmd, VELOCITY);
+
+        // Break loop if all joints are within 0.01 radians of target
+        if (max_err < 0.01) {
+			position_ok++;
+			switch(position_ok) {
+				case 1:
+            		printf("Target 1 reached successfully with Tr = %f s\n", Tr);
+					qf = Eigen::VectorXd::Zero(6);
+					break;
+				case 2:
+            		printf("Target 2 reached successfully with Tr = %f s\n", Tr);
+					exit = true;
+					break;
+				default:
+					exit = true;
+            }
+        }
+    }
+
+
+
+	/*
+	 *  Commande Trapeze puis cinématique
+	 *  /!\ Works better with no correction term Kc because the delay is constant
+	 *  For the commande trapeze, the trajectory is pre planned and sent in full to the simulator, so the delay doesn't cause any issue.
+	 *  For the cinématique command, it still converges because it's already reboucled
+	 */
+	/*
 	Eigen::VectorXd qf(6); qf << 0.0, 40.5, 35.0, 0.0, 59.5, 0.0;
     qf = qf * M_PI / 180.0;  // Convert to radians
 
@@ -128,6 +208,7 @@ int main (int nba, char *arg[])
     //xdot << -0.01, 0.01, 0.0;
     xdot << 0.0, 0.0, 0.0;
     robot.cmdCinematique(0, 0, Pd, Ad, xdot, omega_dot, Kp, K0, dt, alpha, lambda_L, VELOCITY);
+	*/
 
 	sendCmd(0, 0, Eigen::VectorXd::Zero(6), VELOCITY); // Send null command to stop the robot
 
@@ -139,54 +220,58 @@ int main (int nba, char *arg[])
 }
 
 /*
- * Communication
+ * sendCmd implementation : the clientID and hanbdles are handled by the server
+ * The functions in robManip.cpp call this function to send commands
  */
 void sendCmd(int clientID, int *handles, const Eigen::VectorXd& q, CmdType_t cmdType)
 {
-    message_client.cmdType = cmdType;
-    gettimeofday(&message_client.time, NULL);
+	double last_error[NB_JOINTS] = {};
 
-    for (int i = 0; i < NB_JOINTS; i++)
-    {
-        switch (cmdType)
-        {
-        case POSITION:
-            message_client.cmd[i] = q(i);
-            break;
-        case VELOCITY:
-            message_client.cmd[i] = q(i);
-            break;
-        }
-    }
-
-    sendto(client, &message_client, sizeof(message_client), 0,
-           (struct sockaddr*)&sockAddr_client, sizeof(sockAddr_client));
-
-    // Drain the receive buffer right after sending, while the simulator
-    // is processing the command. This prevents frames from piling up
-    // in the socket buffer and causing the burst-read behaviour.
-	int drain_count = 0;
+	// Empty the receive buffer. This prevents the stacking up of old messages
     msg_t tmp = {};
     while (recvfrom(serveur, &tmp, sizeof(tmp), 0,
                     (struct sockaddr*)&sockAddr_serveur, &addr_serveur) != ERROR)
     {
-		drain_count++;
         if (diffTime_ms(&latest_message_serveur.time, &tmp.time) > 0)
             latest_message_serveur = tmp;
     }
 
-	printf("sendCmd: drained %d packets\n", drain_count);
+    message_client.cmdType = cmdType;
+    gettimeofday(&message_client.time, NULL);
+
+	for (int i = 0; i < NB_JOINTS; i++)
+	{
+		switch (cmdType)
+		{
+		case POSITION:
+			last_error[i] = latest_message_serveur.cmd[i] - latest_message_serveur.q_simu[i];
+			break;
+		case VELOCITY:
+			last_error[i] = latest_message_serveur.cmd[i] - latest_message_serveur.qdot_simu[i];
+			break;
+		}
+		
+		message_client.cmd[i] = q(i); // Add a simple proportional term to help with convergence
+	}
+
+
+    sendto(client, &message_client, sizeof(message_client), 0,
+           (struct sockaddr*)&sockAddr_client, sizeof(sockAddr_client));
+
+
 
     usleep(dt * 1000000); // give the simulator time to respond
 }
 
+/*
+ * Used in cmdCinematique to get the latest joint positions from the simulator. Returns -1 on error, 0 on success.
+ */
 int getAllJointsPosition(int clientID, int *handles, Eigen::VectorXd *theta)
 {
-    // Drain any remaining frames that arrived during usleep.
-    // sendCmd already keeps this buffer thin, so usually 0-1 frames land here.
     msg_t tmp;
     int resultr = ERROR;
 
+	// Check if there are any new messages and keep the latest one
     while (recvfrom(serveur, &tmp, sizeof(tmp), 0,(struct sockaddr*)&sockAddr_serveur, &addr_serveur) != ERROR)
     {
         resultr = 0;
@@ -194,8 +279,7 @@ int getAllJointsPosition(int clientID, int *handles, Eigen::VectorXd *theta)
             latest_message_serveur = tmp;
     }
 
-    // Accept stale data from a previous sendCmd drain — the control loop
-    // can still use the last known good state rather than failing entirely.
+	// If we never received any message, return an error
     if (resultr == ERROR && latest_message_serveur.time.tv_sec == 0)
     {
         // No data ever received yet — genuine error
@@ -205,6 +289,33 @@ int getAllJointsPosition(int clientID, int *handles, Eigen::VectorXd *theta)
 
     for (int i = 0; i < NB_JOINTS; i++)
         (*theta)[i] = latest_message_serveur.q_simu[i];
+
+    return 0;
+}
+
+int getAllJointsVelocity(int clientID, int *handles, Eigen::VectorXd *theta_dot)
+{
+    msg_t tmp;
+    int resultr = ERROR;
+
+	// Check if there are any new messages and keep the latest one
+    while (recvfrom(serveur, &tmp, sizeof(tmp), 0,(struct sockaddr*)&sockAddr_serveur, &addr_serveur) != ERROR)
+    {
+        resultr = 0;
+        if (diffTime_ms(&latest_message_serveur.time, &tmp.time) > 0)
+            latest_message_serveur = tmp;
+    }
+
+	// If we never received any message, return an error
+    if (resultr == ERROR && latest_message_serveur.time.tv_sec == 0)
+    {
+        // No data ever received yet — genuine error
+        printf("getAllJointsPosition: no data received from server yet\n");
+        return -1;
+    }
+
+    for (int i = 0; i < NB_JOINTS; i++)
+        (*theta_dot)[i] = latest_message_serveur.qdot_simu[i];
 
     return 0;
 }

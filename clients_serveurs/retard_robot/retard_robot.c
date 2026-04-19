@@ -46,7 +46,7 @@ int find_empty_slot(msg_delay_t *buffer, int size)
 }
 
 #define ERROR (-1)
-#define DELAY_US 20000 // 20ms
+#define DELAY_US 500000 // 200ms
 
 int main (int nba, char *arg[])
 {
