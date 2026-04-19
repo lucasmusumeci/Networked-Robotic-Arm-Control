@@ -36,7 +36,7 @@ extern "C" {
 using namespace std;
 
 /* ------------------------------------------------------------------ */
-/*  Experiment parameters — adjust before running                      */
+/*  Experiment parameters — adjust before running                     */
 /* ------------------------------------------------------------------ */
 
 // Joints to identify (0-based). Comment out joints you don't need.
@@ -45,13 +45,13 @@ static const int N_IDENT = 6;
 
 // Velocity step amplitude per joint (rad/s).
 // Keep small enough to stay well within joint limits.
-static const double V_STEP[6] = {0.1, 0.1, 0.1, 0.1, 0.1, 0.1};
+static const double V_STEP[6] = {0.05, 0.05, 0.1, 0.1, 0.1, 0.1};
 
 // Duration of the velocity step (s).
-static const double T_EXCITE = 0.1;
+static const double T_EXCITE = 0.04;
 
-// Duration of the zero-velocity tail phase (s).
-static const double T_REST = 0.0;
+// Duration of the zero-velocity phase before the step (s)
+static const double T_REST = 0.005;
 
 // Home pose — robot is moved here before every experiment.
 static const double HOME_DEG[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
@@ -60,7 +60,7 @@ static const double HOME_DEG[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 static const double DT = 0.001;
 
 /* ------------------------------------------------------------------ */
-/*  CoppeliaSim handles (global, filled by GetHandles)                 */
+/*  CoppeliaSim handles (global, filled by GetHandles)                */
 /* ------------------------------------------------------------------ */
 
 #define ERROR (-1)
@@ -86,7 +86,7 @@ void GetHandles(int clientID){
 }
 
 /* ------------------------------------------------------------------ */
-/*  Direct-API communication (no UDP, no delay)                        */
+/*  Direct-API communication (no UDP, no delay)                       */
 /* ------------------------------------------------------------------ */
 
 void sendCmd(int clientID, int *h, const Eigen::VectorXd& q, CmdType_t cmdType)
@@ -95,7 +95,7 @@ void sendCmd(int clientID, int *h, const Eigen::VectorXd& q, CmdType_t cmdType)
         if (cmdType == POSITION)
             simxSetJointTargetPosition(clientID, h[i], (simxFloat)q(i),
                                        simx_opmode_oneshot);
-        else
+        else if (cmdType == VELOCITY)
             simxSetJointTargetVelocity(clientID, h[i], (simxFloat)q(i),
                                        simx_opmode_oneshot);
     }
@@ -133,7 +133,7 @@ int getAllJointsVelocity(int clientID, int *h, Eigen::VectorXd *theta_dot)
 
 
 /* ------------------------------------------------------------------ */
-/*  Single-joint step experiment                                        */
+/*  Single-joint step experiment                                      */
 /* ------------------------------------------------------------------ */
 
 static void run_step_experiment(int clientID, Robot& robot, int joint_idx)
@@ -151,11 +151,11 @@ static void run_step_experiment(int clientID, Robot& robot, int joint_idx)
     Eigen::VectorXd q_simu   = Eigen::VectorXd::Zero(6);
     Eigen::VectorXd qdot_simu   = Eigen::VectorXd::Zero(6);
     Eigen::VectorXd old_qdot_simu = Eigen::VectorXd::Zero(6); // Fallback in case of read errors
-
-    // ---- Phase 1: velocity step ----
-    qdot_cmd(joint_idx) = V_STEP[joint_idx];
     
-    for (int k = 0; k < K_excite; k++) {
+    // ---- Phase 1: zero velocity  ----
+    qdot_cmd(joint_idx) = 0.0;
+
+    for (int k = 0; k < K_rest; k++) {
         sendCmd(clientID, handles, qdot_cmd, VELOCITY);
 
         if (getAllJointsPosition(clientID, handles, &q_simu) == -1)
@@ -170,10 +170,10 @@ static void run_step_experiment(int clientID, Robot& robot, int joint_idx)
         old_qdot_simu = qdot_simu;
     }
 
-    // ---- Phase 2: zero velocity — record the tail ----
-    qdot_cmd(joint_idx) = 0.0;
+    // ---- Phase 2: velocity step ----
+    qdot_cmd(joint_idx) = V_STEP[joint_idx];    // Still zero for other joints
 
-    for (int k = 0; k < K_rest; k++) {
+    for (int k = 0; k < K_excite; k++) {
         sendCmd(clientID, handles, qdot_cmd, VELOCITY);
 
         if (getAllJointsPosition(clientID, handles, &q_simu) == -1)
@@ -193,7 +193,7 @@ static void run_step_experiment(int clientID, Robot& robot, int joint_idx)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Main                                                                */
+/*  Main                                                              */
 /* ------------------------------------------------------------------ */
 
 int main(int argc, char *argv[])

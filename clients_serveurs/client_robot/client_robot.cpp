@@ -21,7 +21,6 @@ using namespace std;
 #define NB_JOINTS 6
 typedef struct {
 	int cmdType;
-	int label; // used to easily identify the latest command sent by the client
 	double cmd[NB_JOINTS];
 	double q_simu[NB_JOINTS];
 	double qdot_simu[NB_JOINTS];
@@ -31,8 +30,29 @@ typedef struct {
 #define ERROR (-1)
 
 
-static const double tau[NB_JOINTS] = {0.008, 0.008, 0.007, 0.005, 0.004, 0.004};
+static const double tau[NB_JOINTS] = {0.002, 0.002, 0.003, 0.002, 0.001, 0.001};
 static const double Kc[NB_JOINTS] = {0.8, 0.8, 0.7, 0.5, 0.4, 0.4};
+
+/*
+ * Time functions
+ */
+int getTimeElapsed_ms(struct timeval * t0)
+{
+    struct timeval t;
+    gettimeofday(&t, NULL);
+
+    return (t.tv_sec - t0->tv_sec)*1000 + (t.tv_usec - t0->tv_usec)/1000;
+}
+
+int diffTime_ms(struct timeval * t0, struct timeval * t)
+{
+    return (t->tv_sec - t0->tv_sec)*1000 + (t->tv_usec - t0->tv_usec)/1000;
+}
+
+long long timeval2ms(struct timeval *t)
+{
+    return t->tv_sec*1000 + t->tv_usec/1000;
+}
 
 /*
  *  Global variables for communication
@@ -80,7 +100,6 @@ int main (int nba, char *arg[])
 
 	fcntl(serveur,F_SETFL,fcntl(serveur,F_GETFL) | O_NONBLOCK);
 
-
 	// Initialize the robot model
 	Robot robot = CreateRobotisH(Eigen::VectorXd::Zero(6));
 
@@ -110,7 +129,10 @@ int main (int nba, char *arg[])
     xdot << 0.0, 0.0, 0.0;
     robot.cmdCinematique(0, 0, Pd, Ad, xdot, omega_dot, Kp, K0, dt, alpha, lambda_L, VELOCITY);
 
+	sendCmd(0, 0, Eigen::VectorXd::Zero(6), VELOCITY); // Send null command to stop the robot
+
 	close(serveur);
+	close(client);
 
 	return 0;
 
@@ -122,6 +144,12 @@ int main (int nba, char *arg[])
 void sendCmd(int clientID, int *handles, const Eigen::VectorXd& q, CmdType_t cmdType)
 {
 	double last_error[NB_JOINTS] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+
+	message_client.cmdType = cmdType;
+	gettimeofday(&message_client.time, NULL);
+
+	// Calculate the time elapsed since the latest message received from the server
+	//double Trc = difftime_ms(&message_client.time, &latest_message_serveur.time);
 
 	for (int i = 0; i < NB_JOINTS; i++)
 	{
@@ -135,11 +163,8 @@ void sendCmd(int clientID, int *handles, const Eigen::VectorXd& q, CmdType_t cmd
 			break;
 		}
 		
-		message_client.cmd[i] = q(i) + Kc[i] * last_error[i]; // Add a simple proportional term to help with convergence
+		message_client.cmd[i] = q(i); //+ Kc[i] * last_error[i]; // Add a simple proportional term to help with convergence
 	}
-	message_client.cmdType = cmdType;
-	message_client.label++; // Increment the label to identify the latest command
-	gettimeofday(&message_client.time, NULL);
 
 	int results = sendto(client,&message_client,sizeof(message_client),0,(struct sockaddr*)&sockAddr_client,sizeof(sockAddr_client));
 
@@ -152,35 +177,39 @@ int getAllJointsPosition(int clientID, int *handles, Eigen::VectorXd *theta)
 {
 	int resultr = ERROR;
 	
-	msg_t tmp; // Temporary variable to store last received message
+	msg_t tmp = {}; // Temporary variable to store received message
 
+	// Read messages until we get the latest one (non-blocking)
 	while(recvfrom(serveur,&tmp,sizeof(tmp), 0,(struct sockaddr*)&sockAddr_serveur,&addr_serveur) != ERROR)
 	{
 		resultr = 0; // Received at least 1 message
-		if(&tmp.time > &latest_message_serveur.time) {
+		// Only update if this message is newer than the latest one we have from the server
+		if(diffTime_ms(&latest_message_serveur.time, &tmp.time) > 0) { // Compare timestamps to ensure we get the latest message
 			latest_message_serveur = tmp; // Update to the latest message
 		}
 	}
 
+	// If we received no new message
 	if (resultr == ERROR)
 	{
 		printf("Error receiving joint positions from server\n");
 		return -1; // Return error
 	}
-	
-	//double *q_simu = message_serveur.q_simu;
-	//printf("q = [%f , %f , %f , %f , %f , %f]",q_simu[0],q_simu[1],q_simu[2],q_simu[3],q_simu[4],q_simu[5]);
+
+	// Update theta with the latest joint positions received from the server
 	for(int i=0 ; i<NB_JOINTS ; i++)
 	{
 		(*theta)[i] = latest_message_serveur.q_simu[i];
 	}
 
+	/*
 	printf("theta = [");
     for (int i = 0; i < 6; ++i) {
         printf("%f", (*theta)(i));
         if (i < 5) printf(", ");
     }
     printf("]\n");	
+	*/
 
     return 0; // Return success
 }

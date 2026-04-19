@@ -46,7 +46,7 @@ int find_empty_slot(msg_delay_t *buffer, int size)
 }
 
 #define ERROR (-1)
-#define DELAY_US 500000 // 500ms
+#define DELAY_US 20000 // 20ms
 
 int main (int nba, char *arg[])
 {
@@ -92,7 +92,7 @@ int main (int nba, char *arg[])
 
 	fcntl(serveur,F_SETFL,fcntl(serveur,F_GETFL) | O_NONBLOCK);
 
-	long int  Te=2000; // Te=2ms
+	long int  Te=1; // Te=2ms
 	int empty_slot = -1;
 
 	do

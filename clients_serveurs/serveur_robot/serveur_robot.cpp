@@ -21,7 +21,7 @@ extern "C" {
 #define NB_JOINTS 6
 typedef struct {
     int cmdType;
-	double q_cmd[NB_JOINTS];
+	double cmd[NB_JOINTS];
 	double q_simu[NB_JOINTS];
     double qdot_simu[NB_JOINTS];
 	struct timeval time;
@@ -47,6 +47,27 @@ void GetHandles(int clientID){
             all_ok=0;
         }
     }
+}
+
+/*
+ * Time functions
+ */
+int getTimeElapsed_ms(struct timeval * t0)
+{
+    struct timeval t;
+    gettimeofday(&t, NULL);
+
+    return (t.tv_sec - t0->tv_sec)*1000 + (t.tv_usec - t0->tv_usec)/1000;
+}
+
+int diffTime_ms(struct timeval * t0, struct timeval * t)
+{
+    return (t->tv_sec - t0->tv_sec)*1000 + (t->tv_usec - t0->tv_usec)/1000;
+}
+
+long long timeval2ms(struct timeval *t)
+{
+    return t->tv_sec*1000 + t->tv_usec/1000;
 }
 
 int main (int nba, char *arg[])
@@ -105,21 +126,31 @@ int main (int nba, char *arg[])
 
 	fcntl(serveur,F_SETFL,fcntl(serveur,F_GETFL) | O_NONBLOCK);
 
-    msg_t message;
+    msg_t message = {};
+    gettimeofday(&message.time, NULL);  // Initialize with current time
     int results, resultr;
     results=ERROR;
-	resultr=ERROR;
+	
 
-	do
-	{
+	do {
+        resultr=ERROR; // Reset receive result for this iteration
+        msg_t tmp = {}; // Temporary variable to store received message
 
-		resultr=recvfrom(serveur,&message,sizeof(message), 0,(struct sockaddr*)&sockAddr_serveur,&addr_serveur);
+        // Read messages until we get the latest one (non-blocking)
+        while(recvfrom(serveur,&tmp,sizeof(tmp), 0,(struct sockaddr*)&sockAddr_serveur,&addr_serveur) != ERROR)
+        {
+            resultr = 0; // Received at least 1 message
+            // Only update if this message is newer than the latest one we have from the retard server
+            if(diffTime_ms(&message.time, &tmp.time ) > 0) { // Compare timestamps to ensure we get the latest message
+                message = tmp; // Update to the latest message
+            }
+        }
 
         if(resultr != ERROR) {
             struct timeval current_time;
             gettimeofday(&current_time, NULL);
             long int delay_us = (current_time.tv_sec - message.time.tv_sec) * 1000000 + (current_time.tv_usec - message.time.tv_usec);
-            printf("--- server --- \n delay= %d ms\n ", delay_us/1000);
+            printf("--- server --- \n delay= %ld ms\n ", delay_us/1000);
         }
 		//printf("--- server --- \n rt=%d rr=%d\n time=%ld.%ld\n",results,resultr,message.time.tv_sec,message.time.tv_usec);
 
@@ -128,7 +159,7 @@ int main (int nba, char *arg[])
             // Implementation for sending position command
             for (int i = 0; i < NB_JOINTS; i++)
             {
-                simxSetJointTargetPosition(clientID, handles[i], message.q_cmd[i], simx_opmode_oneshot);
+                simxSetJointTargetPosition(clientID, handles[i], message.cmd[i], simx_opmode_oneshot);
             }
         }
         else if (message.cmdType == 1)
@@ -136,12 +167,12 @@ int main (int nba, char *arg[])
             // Implementation for sending velocity command
             for (int i = 0; i < NB_JOINTS; i++)
             {
-                simxSetJointTargetVelocity(clientID, handles[i], message.q_cmd[i], simx_opmode_oneshot);
+                simxSetJointTargetVelocity(clientID, handles[i], message.cmd[i], simx_opmode_oneshot);
             }
         }
         
         // Trigger a simulation step
-        simxSynchronousTrigger(clientID);
+        simxSynchronousTrigger(clientID); // Since realtime factor < 1, it will wait more than actual dt
 
         int all_positions_ok = 1;
         for (int i = 0; i < 6; i++)

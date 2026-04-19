@@ -13,16 +13,15 @@ extern "C" {
 /*
  * StepLogger — lightweight CSV recorder for joint identification using Coppelia simulation time.
  *
- * Each row:   t_ms, joint_index, qdot_cmd, qdot_simu
+ * Each row:   t_ms, qdot_cmd, qdot_simu
  *
  *   t_ms      : milliseconds from Coppelia simulation time (via simxGetLastCmdTime)
  *               This respects the real-time factor set in Coppelia, unlike wall-clock time.
- *   joint_index: which joint is under excitation (0–5)
  *   qdot_cmd  : commanded velocity (or position)
  *   qdot_simu : measured joint velocity (or position) from the simulator
  *
  * Usage:
- *   StepLogger log("joint2_step.csv", 2, clientID);
+ *   StepLogger log("joint2_step.csv", joint_idx, clientID);
  *   log.record(qdot_cmd_vec, qdot_simu_vec);   // call once per control tick
  *   log.flush();                          // write to disk at end
  */
@@ -62,10 +61,9 @@ public:
             fprintf(stderr, "StepLogger: cannot open %s\n", filename_.c_str());
             return;
         }
-        f << "t_ms,joint,qdot_cmd,qdot_simu\n";
+        f << "t_ms,qdot_cmd,qdot_simu\n";
         for (const auto& r : rows_)
-            f << r.t_ms << "," << joint_idx_ << ","
-              << r.qdot_cmd << "," << r.qdot_simu << "\n";
+            f << r.t_ms  << "," << r.qdot_cmd << "," << r.qdot_simu << "\n";
         fprintf(stdout, "StepLogger: wrote %zu rows to %s\n",
                 rows_.size(), filename_.c_str());
     }
