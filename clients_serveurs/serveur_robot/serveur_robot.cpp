@@ -60,7 +60,7 @@ int getTimeElapsed_ms(struct timeval * t0)
     return (t.tv_sec - t0->tv_sec)*1000 + (t.tv_usec - t0->tv_usec)/1000;
 }
 
-int diffTime_ms(struct timeval * t0, struct timeval * t)
+long long diffTime_ms(struct timeval * t0, struct timeval * t)
 {
     return (t->tv_sec - t0->tv_sec)*1000 + (t->tv_usec - t0->tv_usec)/1000;
 }
@@ -134,7 +134,7 @@ int main (int nba, char *arg[])
 
 	do {
         resultr=ERROR; // Reset receive result for this iteration
-        msg_t tmp = {}; // Temporary variable to store received message
+        msg_t tmp; // Temporary variable to store received message
 
         // Read messages until we get the latest one (non-blocking)
         while(recvfrom(serveur,&tmp,sizeof(tmp), 0,(struct sockaddr*)&sockAddr_serveur,&addr_serveur) != ERROR)

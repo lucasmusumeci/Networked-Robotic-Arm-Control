@@ -44,7 +44,7 @@ int getTimeElapsed_ms(struct timeval * t0)
     return (t.tv_sec - t0->tv_sec)*1000 + (t.tv_usec - t0->tv_usec)/1000;
 }
 
-int diffTime_ms(struct timeval * t0, struct timeval * t)
+long long diffTime_ms(struct timeval * t0, struct timeval * t)
 {
     return (t->tv_sec - t0->tv_sec)*1000 + (t->tv_usec - t0->tv_usec)/1000;
 }
@@ -108,7 +108,7 @@ int main (int nba, char *arg[])
 
     robot.simuTrapeze(0, 0, qf, 3.0, dt, VELOCITY);
 
-	sleep(1);
+	sleep(10*dt);
   
     auto [T, MT] = robot.MGD();
 
@@ -143,73 +143,68 @@ int main (int nba, char *arg[])
  */
 void sendCmd(int clientID, int *handles, const Eigen::VectorXd& q, CmdType_t cmdType)
 {
-	double last_error[NB_JOINTS] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    message_client.cmdType = cmdType;
+    gettimeofday(&message_client.time, NULL);
 
-	message_client.cmdType = cmdType;
-	gettimeofday(&message_client.time, NULL);
+    for (int i = 0; i < NB_JOINTS; i++)
+    {
+        switch (cmdType)
+        {
+        case POSITION:
+            message_client.cmd[i] = q(i);
+            break;
+        case VELOCITY:
+            message_client.cmd[i] = q(i);
+            break;
+        }
+    }
 
-	// Calculate the time elapsed since the latest message received from the server
-	//double Trc = difftime_ms(&message_client.time, &latest_message_serveur.time);
+    sendto(client, &message_client, sizeof(message_client), 0,
+           (struct sockaddr*)&sockAddr_client, sizeof(sockAddr_client));
 
-	for (int i = 0; i < NB_JOINTS; i++)
-	{
-		switch (cmdType)
-		{
-		case POSITION:
-			last_error[i] = latest_message_serveur.cmd[i] - latest_message_serveur.q_simu[i];
-			break;
-		case VELOCITY:
-			last_error[i] = latest_message_serveur.cmd[i] - latest_message_serveur.qdot_simu[i];
-			break;
-		}
-		
-		message_client.cmd[i] = q(i); //+ Kc[i] * last_error[i]; // Add a simple proportional term to help with convergence
-	}
+    // Drain the receive buffer right after sending, while the simulator
+    // is processing the command. This prevents frames from piling up
+    // in the socket buffer and causing the burst-read behaviour.
+	int drain_count = 0;
+    msg_t tmp = {};
+    while (recvfrom(serveur, &tmp, sizeof(tmp), 0,
+                    (struct sockaddr*)&sockAddr_serveur, &addr_serveur) != ERROR)
+    {
+		drain_count++;
+        if (diffTime_ms(&latest_message_serveur.time, &tmp.time) > 0)
+            latest_message_serveur = tmp;
+    }
 
-	int results = sendto(client,&message_client,sizeof(message_client),0,(struct sockaddr*)&sockAddr_client,sizeof(sockAddr_client));
+	printf("sendCmd: drained %d packets\n", drain_count);
 
-	//printf("--- client --- \n  rr=%d rs=%d\n time=%ld.%ld\n ",resultr, results, message.time.tv_sec,message.time.tv_usec);
-
-	usleep(dt*1000000); // Sleep for the duration of the time step (replace syncrhonous mode in Coppelia)
+    usleep(dt * 1000000); // give the simulator time to respond
 }
 
 int getAllJointsPosition(int clientID, int *handles, Eigen::VectorXd *theta)
 {
-	int resultr = ERROR;
-	
-	msg_t tmp = {}; // Temporary variable to store received message
+    // Drain any remaining frames that arrived during usleep.
+    // sendCmd already keeps this buffer thin, so usually 0-1 frames land here.
+    msg_t tmp;
+    int resultr = ERROR;
 
-	// Read messages until we get the latest one (non-blocking)
-	while(recvfrom(serveur,&tmp,sizeof(tmp), 0,(struct sockaddr*)&sockAddr_serveur,&addr_serveur) != ERROR)
-	{
-		resultr = 0; // Received at least 1 message
-		// Only update if this message is newer than the latest one we have from the server
-		if(diffTime_ms(&latest_message_serveur.time, &tmp.time) > 0) { // Compare timestamps to ensure we get the latest message
-			latest_message_serveur = tmp; // Update to the latest message
-		}
-	}
-
-	// If we received no new message
-	if (resultr == ERROR)
-	{
-		printf("Error receiving joint positions from server\n");
-		return -1; // Return error
-	}
-
-	// Update theta with the latest joint positions received from the server
-	for(int i=0 ; i<NB_JOINTS ; i++)
-	{
-		(*theta)[i] = latest_message_serveur.q_simu[i];
-	}
-
-	/*
-	printf("theta = [");
-    for (int i = 0; i < 6; ++i) {
-        printf("%f", (*theta)(i));
-        if (i < 5) printf(", ");
+    while (recvfrom(serveur, &tmp, sizeof(tmp), 0,(struct sockaddr*)&sockAddr_serveur, &addr_serveur) != ERROR)
+    {
+        resultr = 0;
+        if (diffTime_ms(&latest_message_serveur.time, &tmp.time) > 0)
+            latest_message_serveur = tmp;
     }
-    printf("]\n");	
-	*/
 
-    return 0; // Return success
+    // Accept stale data from a previous sendCmd drain — the control loop
+    // can still use the last known good state rather than failing entirely.
+    if (resultr == ERROR && latest_message_serveur.time.tv_sec == 0)
+    {
+        // No data ever received yet — genuine error
+        printf("getAllJointsPosition: no data received from server yet\n");
+        return -1;
+    }
+
+    for (int i = 0; i < NB_JOINTS; i++)
+        (*theta)[i] = latest_message_serveur.q_simu[i];
+
+    return 0;
 }

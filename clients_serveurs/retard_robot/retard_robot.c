@@ -15,7 +15,7 @@
 #define NB_JOINTS 6
 typedef struct {
 	int cmdType;
-	double q_cmd[NB_JOINTS];
+	double cmd[NB_JOINTS];
 	double q_simu[NB_JOINTS];
 	double qdot_simu[NB_JOINTS];
 	struct timeval time;
