@@ -26,7 +26,7 @@ typedef struct {
     struct timeval time_to_send;
 }msg_delay_t;
 
-#define SIZE_MSG_BUFFER 100
+#define SIZE_MSG_BUFFER 1000
 
 int diff_time_us(struct timeval *t1, struct timeval *t2)
 {
@@ -46,7 +46,7 @@ int find_empty_slot(msg_delay_t *buffer, int size)
 }
 
 #define ERROR (-1)
-#define DELAY_US 500000 // 200ms
+#define DELAY_US 200000 // 200ms
 
 int main (int nba, char *arg[])
 {
@@ -115,6 +115,7 @@ int main (int nba, char *arg[])
         {
 			// Random delay
 			//int delay_ms = 20 + (random() % 981);
+
 			// Constant delay
 			int delay_ms = DELAY_US / 1000;
 			tab_msg[empty_slot].msg = message_serveur;
@@ -124,9 +125,6 @@ int main (int nba, char *arg[])
 		}
 
 		//printf("--- server --- \n rt=%d rr=%d\n time=%ld.%ld\n",results_serveur,resultr_serveur,message_serveur.time.tv_sec,message_serveur.time.tv_usec);
-
-		//results_serveur=sendto(serveur,&message_serveur,sizeof(message_serveur),0,(struct sockaddr*)&sockAddr_serveur,sizeof(sockAddr_serveur));
-
 
         // Send message to server
         for(int i=0 ; i<SIZE_MSG_BUFFER ; i++)
@@ -152,8 +150,6 @@ int main (int nba, char *arg[])
 			}
         }
 		
-		//resultr_client=recvfrom(client,&message_client,sizeof(message_client), 0,(struct sockaddr*)&sockAddr_client,&addr_client);
-
         //printf("--- client --- \n rr=%d rs=%d\n time=%ld.%ld\n ",resultr_client, results_client, message_client.time.tv_sec,message_client.time.tv_usec);
 
 	}while(1);

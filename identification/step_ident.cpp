@@ -1,23 +1,11 @@
-//
-// step_ident.cpp — Per-joint step identification via direct CoppeliaSim API
-//
-// Communicates directly with the simulator (no UDP delay emulator) so that
-// the measured response reflects only the true actuator dynamics.
-//
-// Workflow per joint:
-//   1. Home the robot with simuTrapeze.
-//   2. Apply a constant velocity step for T_EXCITE seconds.
-//   3. Send zero velocity for T_REST seconds (response tail).
-//   4. Write (t_us, q_cmd, q_simu) to  jointN_step.csv.
-//
-// Analyse results with:
-//   python3 analyse_step.py jointN_step.csv --plot
-//
-// Compile:
-//   g++ -O2 step_ident.cpp robManip.cpp -o step_ident \
-//       -I/usr/include/eigen3 -std=c++17 \
-//       -L<vrep_lib_dir> -lv_repExtRemoteApi  (or equivalent)
-//
+/*
+ * step_ident.cpp — Per-joint step identification via direct CoppeliaSim API
+ *
+ * Communicates directly with the simulator (no UDP delay emulator) so that
+ * the measured response reflects only the true actuator dynamics
+ * 
+ * Make sure to set the CoppeliaSim time step to 1ms (dt=0.001)
+ */
 
 #include <iostream>
 #include <stdio.h>
@@ -39,8 +27,8 @@ using namespace std;
 /*  Experiment parameters — adjust before running                     */
 /* ------------------------------------------------------------------ */
 
-// Joints to identify (0-based). Comment out joints you don't need.
-static const int JOINTS_TO_IDENTIFY[] = {0, 1, 2, 3, 4, 5};
+// Joints to identify
+static const int JOINTS_TO_IDENTIFY[] = {1, 2, 3, 4, 5, 6};
 static const int N_IDENT = 6;
 
 // Velocity step amplitude per joint (rad/s).
@@ -56,7 +44,7 @@ static const double T_REST = 0.005;
 // Home pose — robot is moved here before every experiment.
 static const double HOME_DEG[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
-// Must match the simulation time step set in CoppeliaSim.
+// /!\ Must match the simulation time step set in CoppeliaSim /!\.
 static const double DT = 0.001;
 
 /* ------------------------------------------------------------------ */
@@ -141,11 +129,11 @@ static void run_step_experiment(int clientID, Robot& robot, int joint_idx)
     const int K_excite = (int)(T_EXCITE / DT);
     const int K_rest   = (int)(T_REST   / DT);
 
-    string fname = "joint" + to_string(joint_idx) + "_step.csv";
+    string fname = "joint" + to_string(joint_idx+1) + "_step.csv";
     StepLogger logger(fname, joint_idx, clientID);
 
     printf("\n=== Joint %d: step %.3f rad/s for %.1f s ===\n",
-           joint_idx, V_STEP[joint_idx], T_EXCITE);
+           joint_idx+1, V_STEP[joint_idx], T_EXCITE);
 
     Eigen::VectorXd qdot_cmd = Eigen::VectorXd::Zero(6);
     Eigen::VectorXd q_simu   = Eigen::VectorXd::Zero(6);
@@ -217,8 +205,7 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    // Synchronous mode: every simxSynchronousTrigger advances exactly
-    // one simulation step — same setup as the original main.cpp.
+    // Synchronous mode: every simxSynchronousTrigger advances exactly one simulation step (dt=1ms)
     simxSynchronous(clientID, true);
     simxStartSimulation(clientID, simx_opmode_oneshot);
 
@@ -241,21 +228,19 @@ int main(int argc, char *argv[])
 
     // ---- Run experiments ----
     for (int n = 0; n < N_IDENT; n++) {
-        int j = JOINTS_TO_IDENTIFY[n];
 
         if (n > 0) {
-            printf("Returning to home before joint %d...\n", j);
+            printf("Returning to home before joint %d...\n", n+1);
             robot.simuTrapeze(clientID, handles, qhome, 0.0, DT, VELOCITY);
             sleep(1);
             if (getAllJointsPosition(clientID, handles, &q_init) == 0)
                 robot.setTheta(q_init);
         }
 
-        run_step_experiment(clientID, robot, j);
+        run_step_experiment(clientID, robot, n);
     }
 
     printf("\nAll experiments complete.\n");
-    printf("Analyse with:  python3 analyse_step.py joint<N>_step.csv --plot\n");
 
     simxStopSimulation(clientID, simx_opmode_oneshot);
     simxFinish(clientID);

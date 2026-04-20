@@ -17,8 +17,8 @@ extern "C" {
  *
  *   t_ms      : milliseconds from Coppelia simulation time (via simxGetLastCmdTime)
  *               This respects the real-time factor set in Coppelia, unlike wall-clock time.
- *   qdot_cmd  : commanded velocity (or position)
- *   qdot_simu : measured joint velocity (or position) from the simulator
+ *   qdot_cmd  : commanded velocity
+ *   qdot_simu : measured joint velocity from the simulator
  *
  * Usage:
  *   StepLogger log("joint2_step.csv", joint_idx, clientID);
@@ -29,7 +29,7 @@ class StepLogger
 {
 public:
     StepLogger(const std::string& filename, int joint_index, int clientID)
-        : joint_idx_(joint_index), filename_(filename), clientID_(clientID)
+        : filename_(filename), joint_idx_(joint_index), clientID_(clientID)
     {
         // Store initial simulation time from Coppelia
         t0_ms_ = simxGetLastCmdTime(clientID_);
@@ -38,7 +38,7 @@ public:
     }
 
     // Record one control tick.
-    // qdot_cmd  : full joint command vector (only joint_idx_ column is written)
+    // qdot_cmd  : full joint command vector (only joint_idx_ column is written in .csv)
     // qdot_simu : full measured joint vector
     void record(const Eigen::VectorXd& qdot_cmd, const Eigen::VectorXd& qdot_simu)
     {

@@ -1,6 +1,12 @@
 #ifndef ROBMANIP_HPP
 #define ROBMANIP_HPP
 
+/*
+ * For more info about the math behind it : 
+ * - https://github.com/lucasmusumeci/6DoF_Robotis-H_Manipulator/blob/main/Rapport_ProjetRobS7-1.pdf
+ * - https://github.com/lucasmusumeci/7Dof_KUKA_LWR/blob/master/Rapport_KUKA_LWR.pdf
+ */
+
 #include <Eigen/Dense>
 #include <vector>
 #include <utility>
