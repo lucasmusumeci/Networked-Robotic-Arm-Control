@@ -118,7 +118,7 @@ int main (int nba, char *arg[])
     
 	// Safety Gain Margin (ideally between 0.2 and 0.6) the higher, the more oscillations
 	// /!\ Must be <1 in our case to ensure stability (KcG < 1)
-    double alpha = 0.4;
+    double alpha = 1.5;
     double max_err_treshold = 0.001; // radians
 
     printf("Starting adaptive control loop...\n");
@@ -127,7 +127,7 @@ int main (int nba, char *arg[])
 	int position_ok = 0;
 	int exit = false;
 
-    int timeout_ms = 10000; // Max 10 seconds to reach the target
+    int timeout_ms = 18000; // Max 10 seconds to reach the target
     struct timeval start;
     gettimeofday(&start, NULL);
     struct timeval now;
@@ -135,59 +135,57 @@ int main (int nba, char *arg[])
     
     while(!exit && diffTime_ms(&start, &now) < timeout_ms) {
 
+        // Get current time
         gettimeofday(&now, NULL);
 
-        // Read current positions
-        if (getAllJointsPosition(0, 0, &q_mes) == ERROR) {
-            continue; // Wait for valid message to arrive
-        }
+        // Read current positions (also stores the latest message from the server in latest_message_serveur)
+        if (getAllJointsPosition(0, 0, &q_mes) != ERROR) {
+            // Record the current message
+            logger.record(&latest_message_serveur);
 
-        // Record the current message
-        logger.record(&latest_message_serveur);
-
-        // Measure dynamic Trc in seconds
-        struct timeval now;
-        gettimeofday(&now, NULL);
-        double Trc = diffTime_ms(&latest_message_serveur.time, &now) / 1000.0;
-		printf("Measured Trc: %f seconds\n", Trc);
-        
-        if (Trc <= 0.001) Trc = 0.001; // Safety floor to prevent division by zero
-
-        // Compute adaptive Kc and apply control law for each joint
-        double max_err = 0.0;
-        for (int i = 0; i < NB_JOINTS; i++) {
-            // Pulsation critique (omega_u) based on the measured delay
-            double omega_u = M_PI / (2.0 * (Trc + tau[i]));
+            // Measure dynamic Trc in seconds
+            double Trc = diffTime_ms(&latest_message_serveur.time, &now) / 1000.0;
+            printf("Measured Trc: %f seconds\n", Trc);
             
-            // Calculate stability limit (K_max)
-            double K_max = (omega_u / G[i]) * sqrt(1.0 + pow(tau[i] * omega_u, 2));
-            
-            // Apply safety margin to get adaptive Kc
-            double Kc = alpha * K_max;
-            
-            // Calculate proportional velocity command
-            double err = qf(i) - q_mes(i);
-            q_cmd(i) = Kc * err;
-            
-            // Determine the maximum position error between every joint
-            if (abs(err) > max_err) max_err = abs(err);
-        }
+            // To prevent division by zero
+            if (Trc <= 0.001) Trc = 0.001; 
 
-        // Send velocity command
-        sendCmd(0, 0, q_cmd, VELOCITY);
+            // Compute adaptive Kc and apply control law for each joint
+            double max_err = 0.0;
+            for (int i = 0; i < NB_JOINTS; i++) {
+                // Pulsation critique (omega_u) based on the measured delay
+                double omega_u = M_PI / (2.0 * (Trc + tau[i]));
+                
+                // Calculate stability limit (K_max)
+                double K_max = (omega_u / G[i]) * sqrt(1.0 + pow(tau[i] * omega_u, 2));
+                
+                // Apply safety margin to get adaptive Kc
+                double Kc = alpha * K_max;
+                
+                // Calculate proportional velocity command
+                double err = qf(i) - q_mes(i);
+                q_cmd(i) = Kc * err;
+                
+                // Determine the maximum position error between every joint
+                if (abs(err) > max_err) max_err = abs(err);
+            }
 
-        // Break loop if all joints are within 0.001 radians of target
-        if (max_err < max_err_treshold) {
-			position_ok++;
-			switch(position_ok) {
-				case 1:
-            		printf("Target 1 reached successfully with Tr = %f s\n", Tr);
-                    exit = true;
-					qf = Eigen::VectorXd::Zero(6);
-					break;
-                // Can add more cases here for multiple targets if needed
-				default:
-					exit = true;
+            // Send velocity command
+            sendCmd(0, 0, q_cmd, VELOCITY);
+
+            // Break loop if all joints are within 0.001 radians of target
+            if (max_err < max_err_treshold) {
+                position_ok++;
+                switch(position_ok) {
+                    case 1:
+                        printf("Target 1 reached successfully with Trc = %f s\n", Trc);
+                        exit = true;
+                        qf = Eigen::VectorXd::Zero(6);
+                        break;
+                    // Can add more cases here for multiple targets if needed
+                    default:
+                        exit = true;
+                }
             }
         }
     }

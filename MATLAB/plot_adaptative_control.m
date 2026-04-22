@@ -1,18 +1,18 @@
 clc; clear; close all;
 
-%% Importation des données
+%% === Importation des données ===
 opts = detectImportOptions('adaptive_control_log.csv');
 data = readtable('adaptive_control_log.csv', opts);
 
 % Extraction du temps
 t = data.t_ms / 1000; % (s)
 
-%% Définition des consignes
+%% === Définition des consignes ===
 % Consignes définies dans le code C++ (en degrés, puis converties en radians)
 qf_deg = [120.0, 60.0, -60.0, 120.0, 60.0, 120.0];
 qf_rad = qf_deg * pi / 180.0;
 
-%% Création de la figure 
+%% === Création de la figure ===
 figure('Name', 'Réponse en position (Commande Adaptative)', 'Position', [100, 100, 1200, 700]);
 
 for i = 1:6

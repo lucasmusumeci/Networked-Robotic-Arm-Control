@@ -415,7 +415,7 @@ Robot CreateRobotisH(const Eigen::VectorXd& initialTheta)
     Eigen::VectorXd a_max(dof); a_max << 30.0, 30.0, 30.0, 30.0, 30.0, 30.0; // rad/s^2
     Eigen::VectorXd V_max(dof); V_max << 3.3, 3.3, 3.3, 3.3, 3.2, 3.2; // rad/s
     Eigen::VectorXd q_min(dof); q_min << -pi, -pi/2.0, -pi/2, -pi, -pi/2, -pi; // rad
-    Eigen::VectorXd q_max(dof); q_max << pi, pi/2.0, 3*pi/4, pi, pi, pi; // rad
+    Eigen::VectorXd q_max(dof); q_max << pi, pi/2.0, 3*pi/4, pi, pi/2, pi; // rad
 
     robot.setTheta(initialTheta);
     robot.setTTool(T_tool);

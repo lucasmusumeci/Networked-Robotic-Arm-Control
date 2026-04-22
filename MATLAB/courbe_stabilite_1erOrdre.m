@@ -1,21 +1,21 @@
-%% Analyse stabilité - 1er Ordre
+%% === Analyse stabilité - 1er Ordre ===
 %  Trc_max = tau * arccos(-1/(Kc*G)) / sqrt((Kc*G)^2 - 1)
 clear; clc; close all;
 
-%% Paramètres
+%% === Paramètres ===
 tau = 0.002;  % Constante de temps (s)
 G    = 1;     % Gain statique
 
-%% Intervalle de Kc (doit être > 1/G pour que KcG > 1)
+%% === Intervalle de Kc (doit être > 1/G pour que KcG > 1) ===
 Kc_min = 1.01 / G;
 Kc_max = 10  / G;
 Kc = linspace(Kc_min, Kc_max, 1000);
 
-%% Calcul KcG et limite de stabilité
+%% === Calcul KcG et limite de stabilité ===
 KcG     = Kc * G;
 Trc_max = (tau .* acos(-1 ./ KcG)) ./ sqrt(KcG.^2 - 1);
 
-%% Plot
+%% === Plot ===
 figure;
 hold on;
 

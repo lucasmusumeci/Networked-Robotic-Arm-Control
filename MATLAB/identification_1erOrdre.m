@@ -1,6 +1,6 @@
 clear; clc; close all;
 
-%% Import des données
+%% === Import des données ===
 
 data = readtable('joint1_step.csv');
 
@@ -10,7 +10,7 @@ y = data.qdot_simu;
 
 dt = mean(diff(t));
 
-%% Détection du début du step et du retard estimé Trc
+%% === Détection du début du step et du retard estimé Trc ===
 
 % --- Détection du début du step sur l'entrée ---
 seuil_u = mean(u(1:10)) + 0.05 * (max(u) - mean(u(1:10)));
@@ -34,7 +34,7 @@ if isempty(idx_reaction)
 end
 t_reaction = t(idx_reaction);
 
-%% Identification de K et tau (sur signal décalé)
+%% === Identification de K et tau (sur signal décalé) ===
 
 % Extraction de la fenêtre utile (après le retard)
 idx_debut = idx_reaction;
@@ -63,10 +63,10 @@ end
 tau = t_id(idx63);
 fprintf('Constante de temps tau = %.4f s\n', tau);
 
-%% Reconstruction du modèle complet avec retard
+%% === Reconstruction du modèle complet avec retard ===
 
 %    y_model(t) = 0                            si t < t_debut_modele
-%    y_model(t) = y_init + K*u*(1-exp(-t/tau)) si t >= t_debut_modele
+%    y_model(t) = y_init + K*u*(1-exp(-(t-t_debut_modele)/tau)) si t >= t_debut_modele
 
 y_model = y_init * ones(size(t));   % Valeur initiale partout
 
@@ -77,7 +77,7 @@ idx_modele = find(t >= t_debut_modele, 1);
 t_modele = t(idx_modele:end) - t_debut_modele;   % Temps local depuis 0
 y_model(idx_modele:end) = y_init + K * u_final * (1 - exp(-t_modele / tau));
 
-%% Comparaison mesure vs modèle
+%% === Comparaison mesure vs modèle ===
 
 figure('Name', 'Identification 1er ordre avec retard', 'NumberTitle', 'off');
 hold on;
@@ -100,7 +100,7 @@ title(sprintf('Identification 1^{er} ordre joint1\nK=%.4f | \\tau=%.4f s', ...
     K, tau), 'FontSize', 13);
 hold off;
 
-%% Récapitulatif console
+%% === Récapitulatif console ===
 
 fprintf('========================================\n');
 fprintf('  PARAMÈTRES IDENTIFIÉS\n');
