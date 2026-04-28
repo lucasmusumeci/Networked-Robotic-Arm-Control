@@ -152,6 +152,10 @@ int main (int nba, char *arg[])
             long int delay_us = (current_time.tv_sec - message.time.tv_sec) * 1000000 + (current_time.tv_usec - message.time.tv_usec);
             printf("--- server --- \n delay= %ld ms\n ", delay_us/1000);
         }
+        else {
+
+        }
+        
 		//printf("--- server --- \n rt=%d rr=%d\n time=%ld.%ld\n",results,resultr,message.time.tv_sec,message.time.tv_usec);
 
         if (message.cmdType == 0)

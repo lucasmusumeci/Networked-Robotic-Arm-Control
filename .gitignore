@@ -13,7 +13,11 @@ old_client_serveur/
 *.exe
 *.sqbpro
 *.csv
+*.pcapng
 *.png
+client_robot
+serveur_robot
+step_ident
 
 # Makefiles générés automatiquement
 **/makefile
